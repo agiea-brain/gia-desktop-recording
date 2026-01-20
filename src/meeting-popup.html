@@ -1,0 +1,268 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="application-name" content="Gia" />
+        <title>Record Meeting?</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                background: #fff;
+                overflow: hidden;
+            }
+            
+            .titlebar {
+                height: 32px;
+                background: #fafafa;
+                border-bottom: 1px solid #e5e5e5;
+                display: flex;
+                align-items: center;
+                padding: 0 12px;
+                -webkit-app-region: drag;
+            }
+            
+            .window-controls {
+                display: flex;
+                gap: 8px;
+                -webkit-app-region: no-drag;
+            }
+            
+            .window-btn {
+                width: 12px;
+                height: 12px;
+                min-width: 12px;
+                min-height: 12px;
+                max-width: 12px;
+                max-height: 12px;
+                padding: 0;
+                margin: 0;
+                border-radius: 50%;
+                border: none;
+                cursor: pointer;
+                transition: opacity 0.15s;
+                -webkit-appearance: none;
+                appearance: none;
+            }
+            
+            .window-btn:hover {
+                opacity: 0.8;
+            }
+            
+            .btn-minimize {
+                background: #febc2e;
+            }
+            
+            .container {
+                padding: 24px;
+                -webkit-app-region: no-drag;
+            }
+            
+            h1 {
+                font-size: 16px;
+                font-weight: 600;
+                color: #000;
+                margin-bottom: 8px;
+            }
+            
+            p {
+                font-size: 13px;
+                color: #666;
+                margin-bottom: 20px;
+                line-height: 1.4;
+            }
+            
+            .recording-status {
+                display: none;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 16px;
+                padding: 10px 12px;
+                background: #fef2f2;
+                border: 1px solid #fecaca;
+                border-radius: 6px;
+                color: #dc2626;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            
+            .recording-status.active {
+                display: flex;
+            }
+            
+            .recording-indicator {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: #dc2626;
+                animation: pulse 1.5s ease-in-out infinite;
+            }
+            
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.4; }
+            }
+            
+            .button-group {
+                display: flex;
+                gap: 8px;
+            }
+            
+            button {
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.15s, border-color 0.15s;
+                flex: 1;
+            }
+            
+            .btn-primary {
+                background: #22c55e;
+                color: #fff;
+                border: 1px solid #22c55e;
+            }
+            
+            .btn-primary:hover:not(:disabled) {
+                background: #16a34a;
+                border-color: #16a34a;
+            }
+            
+            .btn-secondary {
+                background: #fff;
+                color: #333;
+                border: 1px solid #d1d5db;
+            }
+            
+            .btn-secondary:hover:not(:disabled) {
+                background: #f9fafb;
+                border-color: #9ca3af;
+            }
+            
+            .btn-danger {
+                background: #dc2626;
+                color: #fff;
+                border: 1px solid #dc2626;
+            }
+            
+            .btn-danger:hover:not(:disabled) {
+                background: #b91c1c;
+                border-color: #b91c1c;
+            }
+            
+            button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="titlebar">
+            <div class="window-controls">
+                <button class="window-btn btn-minimize" id="minimizeBtn" title="Minimize"></button>
+            </div>
+        </div>
+        
+        <div class="container">
+            <h1 id="title">Record this meeting?</h1>
+            <p id="message">A meeting has been detected.</p>
+            
+            <div class="recording-status" id="recordingStatus">
+                <div class="recording-indicator"></div>
+                <span>Recording</span>
+            </div>
+            
+            <div class="button-group" id="initialButtons">
+                <button class="btn-secondary" id="declineBtn">No</button>
+                <button class="btn-primary" id="confirmBtn">Yes</button>
+            </div>
+            
+            <div class="button-group" id="recordingButtons" style="display: none;">
+                <button class="btn-danger" id="endBtn">End Recording</button>
+            </div>
+        </div>
+        
+        <script>
+            const { ipcRenderer } = require('electron');
+            
+            const titleEl = document.getElementById('title');
+            const messageEl = document.getElementById('message');
+            const recordingStatusEl = document.getElementById('recordingStatus');
+            const initialButtonsEl = document.getElementById('initialButtons');
+            const recordingButtonsEl = document.getElementById('recordingButtons');
+            const confirmBtn = document.getElementById('confirmBtn');
+            const declineBtn = document.getElementById('declineBtn');
+            const endBtn = document.getElementById('endBtn');
+            const minimizeBtn = document.getElementById('minimizeBtn');
+            
+            let isRecording = false;
+            
+            // Window controls
+            minimizeBtn.addEventListener('click', () => {
+                ipcRenderer.invoke('meeting-popup:minimize');
+            });
+            
+            // Handle confirm button
+            confirmBtn.addEventListener('click', async () => {
+                if (isRecording) return;
+                
+                confirmBtn.disabled = true;
+                declineBtn.disabled = true;
+                confirmBtn.textContent = 'Starting...';
+                
+                try {
+                    await ipcRenderer.invoke('meeting-popup:confirm-recording');
+                } catch (error) {
+                    console.error('Error starting recording:', error);
+                    confirmBtn.disabled = false;
+                    declineBtn.disabled = false;
+                    confirmBtn.textContent = 'Yes';
+                }
+            });
+            
+            // Handle decline button
+            declineBtn.addEventListener('click', async () => {
+                if (isRecording) return;
+                await ipcRenderer.invoke('meeting-popup:decline-recording');
+            });
+            
+            // Handle end recording button
+            endBtn.addEventListener('click', async () => {
+                if (!isRecording) return;
+                
+                endBtn.disabled = true;
+                endBtn.textContent = 'Stopping...';
+                
+                try {
+                    await ipcRenderer.invoke('meeting-popup:end-recording');
+                } catch (error) {
+                    console.error('Error ending recording:', error);
+                    endBtn.disabled = false;
+                    endBtn.textContent = 'End Recording';
+                }
+            });
+            
+            // Listen for recording state changes
+            ipcRenderer.on('meeting-popup:recording-started', () => {
+                isRecording = true;
+                titleEl.textContent = 'Recording';
+                messageEl.style.display = 'none';
+                recordingStatusEl.classList.add('active');
+                initialButtonsEl.style.display = 'none';
+                recordingButtonsEl.style.display = 'flex';
+                confirmBtn.disabled = false;
+                declineBtn.disabled = false;
+            });
+            
+            ipcRenderer.on('meeting-popup:recording-ended', () => {
+                // Window will be closed by main process
+            });
+        </script>
+    </body>
+</html>
