@@ -2,9 +2,23 @@ const apiRoutes = {
     getUploadToken: "/api/content/recall/upload-token/",
 };
 
+const ENVIRONMENT = "local";
+
+function getApiUrl() {
+    if (ENVIRONMENT === "local") {
+        return "http://localhost:8080";
+    }
+    else if (ENVIRONMENT === "production") {
+        return "https://api.myagiea.com";
+    }
+    else {
+        return "https://r0ng0htend.execute-api.us-east-2.amazonaws.com/stage";
+    }
+}
+
 class Api {
     constructor() {
-        this.apiUrl = "http://localhost:8080";
+        this.apiUrl = getApiUrl();
         this.authToken = null;
     }
 
