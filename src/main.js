@@ -23,7 +23,7 @@ const api = new Api();
 
 // Toggle developer-only tray items.
 // Set to true locally when you want quick access to logs.
-const DEBUG = true;
+const DEBUG = false;
 const START_ON_LOGIN = true;
 
 let loginInFlight = null;

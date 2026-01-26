@@ -3,7 +3,7 @@ const apiRoutes = {
     registerMeetingUrl: "/api/content/recall/register-meeting-url/",
 };
 
-const ENVIRONMENT = "local";
+const ENVIRONMENT = "development";
 
 function getApiUrl() {
     if (ENVIRONMENT === "local") {
