@@ -35,7 +35,7 @@ let isPaused = false;
 let logFilePath = null;
 let meetingPopupWindow = null;
 let debugControlsWindow = null;
-let currentMeetingInfo = null; // { windowId, uploadToken, recordingId, sdkUploadId, lastRegisteredMeetingUrl, lastRegisterAttemptUrl, lastRegisterAttemptAt }
+let currentMeetingInfo = null; // { windowId, meetingUrl, uploadToken, recordingId, sdkUploadId, lastRegisteredMeetingUrl, lastRegisterAttemptUrl, lastRegisterAttemptAt }
 let userWantsToRecord = false; // Set to true when user confirms they want to record
 let recordingStarted = false; // Ensures recording only starts once per meeting
 
@@ -94,13 +94,75 @@ function getTrayIconPath() {
     return candidates[0];
 }
 
+function refreshTrayMenu() {
+    if (!tray) return;
+    tray.setContextMenu(buildTrayMenu());
+}
+
+async function startMeetingRecordingWithAuth({ source = "unknown" } = {}) {
+    if (!currentMeetingInfo) {
+        throw new Error("No meeting information available");
+    }
+    if (isRecording) return;
+
+    console.log(`[recall] start recording requested (source=${source})`);
+    userWantsToRecord = true;
+    closeMeetingPopup();
+    refreshTrayMenu();
+
+    try {
+        const accessToken = await ensureAccessToken({ interactive: true });
+        if (!accessToken) {
+            throw new Error("Not authenticated: no access token available");
+        }
+
+        await getUploadTokenAndStoreInfo();
+        await registerCurrentMeetingUrlIfNeeded();
+        await startMeetingRecording();
+    } catch (error) {
+        console.error(
+            `[recall] failed to start recording (source=${source}):`,
+            error,
+        );
+        // Keep meeting info so the user can retry while meeting is still active.
+        userWantsToRecord = false;
+        recordingStarted = false;
+        refreshTrayMenu();
+        throw error;
+    }
+}
+
 function buildTrayMenu() {
     const status = !isRecording ? "Idle" : isPaused ? "Paused" : "Recording";
+    // Treat "Start Recording" as another way to accept the popup:
+    // if a meeting is active and we're not already recording, allow manual start.
+    const canManualStart =
+        !!currentMeetingInfo && !isRecording && !userWantsToRecord;
     const template = [
         {
             label: `Status: ${status}`,
             enabled: false,
         },
+        ...(canManualStart
+            ? [
+                  {
+                      label: "Start Recording",
+                      enabled: true,
+                      click: async () => {
+                          try {
+                              await startMeetingRecordingWithAuth({
+                                  source: "tray",
+                              });
+                          } catch (e) {
+                              console.error(
+                                  "[tray] failed to start recording:",
+                                  e,
+                              );
+                          }
+                      },
+                  },
+              ]
+            : []),
         {
             label: isPaused ? "Resume Recording" : "Pause Recording",
             enabled: isRecording,
@@ -225,7 +287,7 @@ function setCaptureState({ recording, paused }) {
               ? "Paused"
               : "Recording";
         tray.setToolTip(`${app.getName()} — ${status}`);
-        tray.setContextMenu(buildTrayMenu());
+        refreshTrayMenu();
     }
 
     // Developer-only floating controls while recording.
@@ -478,14 +540,8 @@ function showMeetingPopup() {
     // Clean up on close
     meetingPopupWindow.on("closed", () => {
         meetingPopupWindow = null;
-        // If recording hasn't started AND the user didn't confirm, clear meeting info.
-        // We close the popup immediately on confirm, but still need the meeting info
-        // to start recording after the user accepts.
-        if (!isRecording && !userWantsToRecord) {
-            userWantsToRecord = false;
-            recordingStarted = false;
-            currentMeetingInfo = null;
-        }
+        // Keep meeting info while the meeting is active so the user can start
+        // recording later from the tray (even if they closed/declined the popup).
     });
 
     // Prevent navigation
@@ -551,6 +607,67 @@ async function getUploadTokenAndStoreInfo() {
             console.log("[recall] extracted sdk upload id:", sdkUploadId);
         }
         currentMeetingInfo.sdkUploadId = sdkUploadId;
+    }
+}
+
+async function registerCurrentMeetingUrlIfNeeded() {
+    if (!currentMeetingInfo) {
+        console.log("[recall] register meeting URL skipped (no meeting info)");
+        return;
+    }
+
+    const meetingUrl = currentMeetingInfo.meetingUrl ?? null;
+    if (!meetingUrl) {
+        console.log(
+            "[recall] register meeting URL skipped (no meeting URL yet)",
+        );
+        return;
+    }
+
+    // Dedupe and throttle to avoid spamming the API.
+    const now = Date.now();
+    const alreadyRegistered =
+        currentMeetingInfo.lastRegisteredMeetingUrl === meetingUrl;
+    const recentlyAttemptedSameUrl =
+        currentMeetingInfo.lastRegisterAttemptUrl === meetingUrl &&
+        now - (currentMeetingInfo.lastRegisterAttemptAt || 0) < 15_000;
+
+    if (alreadyRegistered) {
+        console.log(
+            "[recall] register meeting URL skipped (already registered)",
+        );
+        return;
+    }
+    if (recentlyAttemptedSameUrl) {
+        console.log("[recall] register meeting URL skipped (throttled)");
+        return;
+    }
+
+    currentMeetingInfo.lastRegisterAttemptUrl = meetingUrl;
+    currentMeetingInfo.lastRegisterAttemptAt = now;
+
+    try {
+        console.log("[recall] registering meeting URL...");
+        const accessToken = await ensureAccessToken({ interactive: false });
+        if (!accessToken) {
+            console.log(
+                "[recall] cannot register meeting URL (not authenticated)",
+            );
+            return;
+        }
+
+        const recordingId = currentMeetingInfo.recordingId ?? null;
+        const sdkUploadId = currentMeetingInfo.sdkUploadId ?? null;
+        await api.registerMeetingUrl({
+            meetingUrl,
+            recordingId,
+            sdkUploadId,
+        });
+
+        currentMeetingInfo.lastRegisteredMeetingUrl = meetingUrl;
+        console.log("[recall] registered meeting URL");
+    } catch (e) {
+        console.error("[recall] failed to register meeting URL:", e);
     }
 }
 
@@ -652,9 +769,14 @@ async function setupMeetingPopupIpc() {
         closeMeetingPopup();
 
         try {
-            await startMeetingRecording();
+            await startMeetingRecordingWithAuth({ source: "popup" });
         } catch (error) {
             console.error("[meeting-popup] failed to start recording:", error);
+            // Reset state so we don't get stuck in a "confirmed" flow on failure.
+            userWantsToRecord = false;
+            recordingStarted = false;
+            currentMeetingInfo = null;
+            refreshTrayMenu();
             throw error;
         }
     });
@@ -663,8 +785,8 @@ async function setupMeetingPopupIpc() {
         console.log("[meeting-popup] user declined recording");
         userWantsToRecord = false;
         recordingStarted = false;
-        currentMeetingInfo = null;
         closeMeetingPopup();
+        refreshTrayMenu();
     });
 
     ipcMain.handle("meeting-popup:minimize", async () => {
@@ -876,16 +998,14 @@ async function bootstrap() {
         recordingStarted = false;
 
         try {
-            console.log("[recall] checking authentication...");
-            const accessToken = await ensureAccessToken({ interactive: true });
-            console.log("[recall] access token obtained:", !!accessToken);
-            if (!accessToken) {
-                throw new Error("Not authenticated: no access token available");
-            }
-
-            // Store meeting info (upload token and recording id fetched below)
+            console.log(
+                "[recall] meeting detected: initializing meeting state",
+            );
+            // Store meeting info. Important: do NOT call the API here.
+            // We only authenticate + fetch upload token after the user confirms.
             currentMeetingInfo = {
                 windowId: windowId,
+                meetingUrl: null,
                 uploadToken: null,
                 recordingId: null,
                 sdkUploadId: null,
@@ -894,14 +1014,14 @@ async function bootstrap() {
                 lastRegisterAttemptAt: 0,
             };
 
-            await getUploadTokenAndStoreInfo();
-
             // Show popup to ask if user wants to record
             console.log("[recall] showing meeting popup...");
             showMeetingPopup();
+            refreshTrayMenu();
         } catch (e) {
             console.error("[recall] meeting detection failed:", e);
             currentMeetingInfo = null;
+            refreshTrayMenu();
         }
     });
 
@@ -925,41 +1045,21 @@ async function bootstrap() {
             return;
         }
 
-        // Dedupe and throttle to avoid spamming the API.
-        const now = Date.now();
-        const alreadyRegistered =
-            currentMeetingInfo.lastRegisteredMeetingUrl === meetingUrl;
-        const recentlyAttemptedSameUrl =
-            currentMeetingInfo.lastRegisterAttemptUrl === meetingUrl &&
-            now - (currentMeetingInfo.lastRegisterAttemptAt || 0) < 15_000;
+        // Always keep the latest meeting URL, but only call the API after user confirms.
+        currentMeetingInfo.meetingUrl = meetingUrl;
+        console.log(
+            "[recall] stored meeting URL (confirmed=%s)",
+            userWantsToRecord,
+        );
 
-        if (alreadyRegistered || recentlyAttemptedSameUrl) return;
-
-        currentMeetingInfo.lastRegisterAttemptUrl = meetingUrl;
-        currentMeetingInfo.lastRegisterAttemptAt = now;
-
-        try {
-            const accessToken = await ensureAccessToken({ interactive: false });
-            if (!accessToken) {
-                console.log(
-                    "[recall] cannot register meeting URL (not authenticated)",
-                );
-                return;
-            }
-
-            const recordingId = currentMeetingInfo.recordingId ?? null;
-            const sdkUploadId = currentMeetingInfo.sdkUploadId ?? null;
-            await api.registerMeetingUrl({
-                meetingUrl,
-                recordingId,
-                sdkUploadId,
-            });
-
-            currentMeetingInfo.lastRegisteredMeetingUrl = meetingUrl;
-            console.log("[recall] registered meeting URL");
-        } catch (e) {
-            console.error("[recall] failed to register meeting URL:", e);
+        if (!userWantsToRecord) {
+            console.log(
+                "[recall] deferring meeting URL registration until confirm",
+            );
+            return;
         }
+
+        await registerCurrentMeetingUrlIfNeeded();
     });
 
     RecallAiSdk.addEventListener("sdk-state-change", async (evt) => {
@@ -995,6 +1095,7 @@ async function bootstrap() {
                 userWantsToRecord = false;
                 recordingStarted = false;
                 currentMeetingInfo = null;
+                refreshTrayMenu();
                 break;
             default:
                 console.log("[recall] SDK state:", evt.sdk.state.code);
@@ -1019,6 +1120,7 @@ async function bootstrap() {
         userWantsToRecord = false;
         recordingStarted = false;
         currentMeetingInfo = null;
+        refreshTrayMenu();
     });
 
     // Setup IPC handlers for meeting popup
