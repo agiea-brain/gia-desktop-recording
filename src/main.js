@@ -23,12 +23,10 @@ const api = new Api();
 
 // Toggle developer-only tray items.
 // Set to true locally when you want quick access to logs.
-const DEBUG = false;
+const DEBUG = true;
 const START_ON_LOGIN = true;
 
 let loginInFlight = null;
-let userProfileInFlight = null;
-let cachedUserProfile = null;
 
 let tray = null;
 let isRecording = false;
@@ -36,7 +34,8 @@ let isPaused = false;
 
 let logFilePath = null;
 let meetingPopupWindow = null;
-let currentMeetingInfo = null; // { windowId, uploadToken, url }
+let debugControlsWindow = null;
+let currentMeetingInfo = null; // { windowId, uploadToken, recordingId, sdkUploadId, lastRegisteredMeetingUrl, lastRegisterAttemptUrl, lastRegisterAttemptAt }
 let userWantsToRecord = false; // Set to true when user confirms they want to record
 let recordingStarted = false; // Ensures recording only starts once per meeting
 
@@ -138,6 +137,20 @@ function buildTrayMenu() {
         ...(DEBUG
             ? [
                   {
+                      label: "Show Debug Controls",
+                      enabled: isRecording,
+                      click: async () => {
+                          try {
+                              showDebugControlsWindow({ focus: true });
+                          } catch (e) {
+                              console.error(
+                                  "[tray] failed to show debug controls:",
+                                  e,
+                              );
+                          }
+                      },
+                  },
+                  {
                       label: "Open Logs",
                       click: async () => {
                           try {
@@ -213,6 +226,16 @@ function setCaptureState({ recording, paused }) {
               : "Recording";
         tray.setToolTip(`${app.getName()} — ${status}`);
         tray.setContextMenu(buildTrayMenu());
+    }
+
+    // Developer-only floating controls while recording.
+    if (DEBUG) {
+        if (isRecording) {
+            showDebugControlsWindow({ focus: false });
+            sendDebugControlsState();
+        } else {
+            closeDebugControlsWindow();
+        }
     }
 }
 
@@ -318,6 +341,102 @@ function getMeetingPopupPath() {
     return candidates[0];
 }
 
+function getDebugControlsPath() {
+    // In production, the file can be copied to Resources via forge extraResource.
+    if (app.isPackaged) {
+        const resourcePath = path.join(
+            process.resourcesPath,
+            "debug-controls.html",
+        );
+        if (fs.existsSync(resourcePath)) return resourcePath;
+    }
+
+    // In dev, try a few locations
+    const candidates = [
+        path.join(process.cwd(), "src", "debug-controls.html"),
+        path.join(app.getAppPath(), "src", "debug-controls.html"),
+        path.resolve(__dirname, "..", "..", "src", "debug-controls.html"),
+        path.resolve(__dirname, "..", "debug-controls.html"),
+    ];
+
+    for (const p of candidates) {
+        try {
+            if (fs.existsSync(p)) return p;
+        } catch {
+            // ignore and try next candidate
+        }
+    }
+
+    return candidates[0];
+}
+
+function sendDebugControlsState() {
+    if (!debugControlsWindow || debugControlsWindow.isDestroyed()) return;
+    debugControlsWindow.webContents.send("debug-controls:state", {
+        recording: isRecording,
+        paused: isPaused,
+        windowId: currentMeetingInfo?.windowId ?? null,
+    });
+}
+
+function showDebugControlsWindow({ focus = false } = {}) {
+    if (!DEBUG) return;
+
+    if (debugControlsWindow && !debugControlsWindow.isDestroyed()) {
+        debugControlsWindow.show();
+        if (focus) debugControlsWindow.focus();
+        sendDebugControlsState();
+        return;
+    }
+
+    const debugPath = getDebugControlsPath();
+    debugControlsWindow = new BrowserWindow({
+        width: 340,
+        height: 220,
+        resizable: false,
+        minimizable: true,
+        maximizable: false,
+        closable: true,
+        alwaysOnTop: true,
+        frame: true,
+        transparent: false,
+        backgroundColor: "#0b0f14",
+        show: false,
+        skipTaskbar: false,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+        },
+    });
+
+    debugControlsWindow.loadFile(debugPath);
+    debugControlsWindow.center();
+
+    debugControlsWindow.once("ready-to-show", () => {
+        debugControlsWindow?.show();
+        if (focus) debugControlsWindow?.focus();
+    });
+
+    debugControlsWindow.webContents.on("did-finish-load", () => {
+        sendDebugControlsState();
+    });
+
+    debugControlsWindow.webContents.on("will-navigate", (e) => {
+        e.preventDefault();
+    });
+
+    debugControlsWindow.on("closed", () => {
+        debugControlsWindow = null;
+    });
+}
+
+function closeDebugControlsWindow() {
+    if (debugControlsWindow && !debugControlsWindow.isDestroyed()) {
+        debugControlsWindow.destroy();
+        debugControlsWindow = null;
+    }
+}
+
 function showMeetingPopup() {
     // Close existing popup if any
     if (meetingPopupWindow && !meetingPopupWindow.isDestroyed()) {
@@ -360,8 +479,8 @@ function showMeetingPopup() {
     meetingPopupWindow.on("closed", () => {
         meetingPopupWindow = null;
         // If recording hasn't started AND the user didn't confirm, clear meeting info.
-        // We close the popup immediately on confirm now, but still need the meeting info
-        // to start recording once the URL arrives.
+        // We close the popup immediately on confirm, but still need the meeting info
+        // to start recording after the user accepts.
         if (!isRecording && !userWantsToRecord) {
             userWantsToRecord = false;
             recordingStarted = false;
@@ -382,20 +501,15 @@ function closeMeetingPopup() {
     }
 }
 
-async function getUploadTokenAndStartRecording({ meetingUrl }) {
+async function getUploadTokenAndStoreInfo() {
     if (!currentMeetingInfo) {
         throw new Error("No meeting information available");
-    }
-
-    if (recordingStarted) {
-        console.log("[recall] recording already started, skipping");
-        return;
     }
 
     // Get upload token if we don't have it yet
     if (!currentMeetingInfo.uploadToken) {
         console.log("[recall] requesting upload token...");
-        const uploadTokenData = await api.getUploadToken(meetingUrl);
+        const uploadTokenData = await api.getUploadToken();
         console.log("[recall] upload token data:", uploadTokenData);
 
         // Check both possible response formats - token may be nested
@@ -419,10 +533,25 @@ async function getUploadTokenAndStartRecording({ meetingUrl }) {
 
         console.log("[recall] extracted upload token:", uploadToken);
         currentMeetingInfo.uploadToken = uploadToken;
-    }
 
-    // Now start the recording
-    await startMeetingRecording();
+        const recordingId = uploadTokenData.uploadToken?.recording_id ?? null;
+        if (recordingId) {
+            console.log("[recall] extracted recording id:", recordingId);
+        }
+        currentMeetingInfo.recordingId = recordingId;
+
+        // Store sdk upload id (if provided by the API)
+        const sdkUploadId =
+            uploadTokenData.uploadToken?.sdk_upload_id ??
+            uploadTokenData.sdk_upload_id ??
+            uploadTokenData.uploadToken?.sdkUploadId ??
+            uploadTokenData.sdkUploadId ??
+            null;
+        if (sdkUploadId) {
+            console.log("[recall] extracted sdk upload id:", sdkUploadId);
+        }
+        currentMeetingInfo.sdkUploadId = sdkUploadId;
+    }
 }
 
 async function startMeetingRecording() {
@@ -520,28 +649,13 @@ async function setupMeetingPopupIpc() {
         userWantsToRecord = true;
 
         // Close the popup immediately after the user confirms.
-        // Recording can still start later once we receive the meeting URL.
         closeMeetingPopup();
 
-        // If we already have the URL (from meeting-updated), get token and start recording now
-        if (currentMeetingInfo.url && !recordingStarted) {
-            try {
-                await getUploadTokenAndStartRecording({
-                    windowId: currentMeetingInfo.windowId,
-                    meetingUrl: currentMeetingInfo.url,
-                });
-            } catch (error) {
-                console.error(
-                    "[meeting-popup] failed to start recording:",
-                    error,
-                );
-                throw error;
-            }
-        } else {
-            console.log(
-                "[meeting-popup] waiting for meeting-updated event with URL...",
-            );
-            // Popup is closed; no UI update needed.
+        try {
+            await startMeetingRecording();
+        } catch (error) {
+            console.error("[meeting-popup] failed to start recording:", error);
+            throw error;
         }
     });
 
@@ -583,6 +697,62 @@ async function setupMeetingPopupIpc() {
     });
 }
 
+async function setupDebugControlsIpc() {
+    ipcMain.handle("debug-controls:get-state", async () => {
+        return {
+            recording: isRecording,
+            paused: isPaused,
+            windowId: currentMeetingInfo?.windowId ?? null,
+        };
+    });
+
+    ipcMain.handle("debug-controls:toggle-pause", async () => {
+        if (!isRecording) return { ok: false, reason: "not_recording" };
+        try {
+            if (isPaused) {
+                await resumeMeetingRecording();
+            } else {
+                await pauseMeetingRecording();
+            }
+            return { ok: true };
+        } finally {
+            sendDebugControlsState();
+        }
+    });
+
+    ipcMain.handle("debug-controls:stop", async () => {
+        if (!isRecording) return { ok: false, reason: "not_recording" };
+
+        try {
+            await stopMeetingRecording();
+            return { ok: true };
+        } finally {
+            // Clear meeting state after the stop attempt to avoid stuck UI/state.
+            userWantsToRecord = false;
+            recordingStarted = false;
+            currentMeetingInfo = null;
+            closeMeetingPopup();
+            setCaptureState({ recording: false, paused: false });
+            closeDebugControlsWindow();
+        }
+    });
+
+    ipcMain.handle("debug-controls:open-logs", async () => {
+        try {
+            const logsDir = app.getPath("logs");
+            const target =
+                logFilePath && fs.existsSync(logFilePath)
+                    ? logFilePath
+                    : logsDir;
+            await shell.openPath(target);
+            return { ok: true };
+        } catch (e) {
+            console.error("[debug-controls] failed to open logs:", e);
+            return { ok: false };
+        }
+    });
+}
+
 async function setupAuthIpc() {
     ipcMain.handle("auth:isAuthenticated", async () => {
         const auth = await isAuthenticated();
@@ -609,7 +779,6 @@ async function setupAuthIpc() {
     ipcMain.handle("auth:logout", async () => {
         await logout();
         api.setAuthToken(null);
-        cachedUserProfile = null;
         return { ok: true };
     });
 }
@@ -655,6 +824,7 @@ async function bootstrap() {
     createTray();
 
     await setupAuthIpc();
+    await setupDebugControlsIpc();
 
     // Lightweight startup check (doesn't force an interactive login).
     const auth = await isAuthenticated();
@@ -682,17 +852,9 @@ async function bootstrap() {
 
     RecallAiSdk.addEventListener("meeting-detected", async (evt) => {
         const windowId = evt.window.id;
-        const meetingUrl = evt.window.url;
         const meetingPlatform = evt.window?.platform;
         console.log("[recall] meeting-detected event:", evt.window);
         console.log("[recall] window id:", windowId);
-        if (meetingUrl) {
-            console.log("[recall] meeting-detected URL available:", meetingUrl);
-        } else {
-            console.log(
-                "[recall] meeting-detected URL not available yet (will wait for meeting-updated)",
-            );
-        }
 
         if (meetingPlatform === "slack") {
             console.log(
@@ -721,14 +883,18 @@ async function bootstrap() {
                 throw new Error("Not authenticated: no access token available");
             }
 
-            // Store meeting info (without upload token yet - that comes in meeting-updated)
+            // Store meeting info (upload token and recording id fetched below)
             currentMeetingInfo = {
                 windowId: windowId,
                 uploadToken: null,
-                // If the SDK already provides a URL at detection time, we can start immediately
-                // after the user confirms. Otherwise we'll wait for meeting-updated.
-                url: meetingUrl || null,
+                recordingId: null,
+                sdkUploadId: null,
+                lastRegisteredMeetingUrl: null,
+                lastRegisterAttemptUrl: null,
+                lastRegisterAttemptAt: 0,
             };
+
+            await getUploadTokenAndStoreInfo();
 
             // Show popup to ask if user wants to record
             console.log("[recall] showing meeting popup...");
@@ -740,63 +906,59 @@ async function bootstrap() {
     });
 
     RecallAiSdk.addEventListener("meeting-updated", async (evt) => {
-        const windowId = evt.window.id;
-        const meetingUrl = evt.window.url;
-        const meetingPlatform = evt.window?.platform;
+        const meetingUrl = evt.window?.url ?? null;
+        const windowId = evt.window?.id ?? null;
         console.log("[recall] meeting-updated event:", evt.window);
-        console.log("[recall] window id:", windowId, "url:", meetingUrl);
+        console.log("[recall] meeting-updated URL:", meetingUrl);
 
-        if (meetingPlatform === "slack") {
+        if (!meetingUrl) return;
+
+        // Only register URLs for the meeting we're currently tracking.
+        if (
+            !currentMeetingInfo ||
+            !windowId ||
+            currentMeetingInfo.windowId !== windowId
+        ) {
             console.log(
-                "[recall] slack meeting updated, skipping popup and recording",
+                "[recall] meeting-updated ignored (no current meeting or window mismatch)",
             );
             return;
         }
 
-        // If no current meeting info or different window, ignore
-        if (!currentMeetingInfo || currentMeetingInfo.windowId !== windowId) {
-            console.log(
-                "[recall] meeting-updated for unknown/different meeting, ignoring",
-            );
-            return;
-        }
+        // Dedupe and throttle to avoid spamming the API.
+        const now = Date.now();
+        const alreadyRegistered =
+            currentMeetingInfo.lastRegisteredMeetingUrl === meetingUrl;
+        const recentlyAttemptedSameUrl =
+            currentMeetingInfo.lastRegisterAttemptUrl === meetingUrl &&
+            now - (currentMeetingInfo.lastRegisterAttemptAt || 0) < 15_000;
 
-        // Update URL in meeting info
-        currentMeetingInfo.url = meetingUrl;
+        if (alreadyRegistered || recentlyAttemptedSameUrl) return;
 
-        // Only proceed if user has confirmed they want to record and we haven't started yet
-        if (!userWantsToRecord) {
-            console.log(
-                "[recall] user hasn't confirmed recording yet, waiting...",
-            );
-            return;
-        }
+        currentMeetingInfo.lastRegisterAttemptUrl = meetingUrl;
+        currentMeetingInfo.lastRegisterAttemptAt = now;
 
-        if (recordingStarted) {
-            console.log(
-                "[recall] recording already started, ignoring meeting-updated",
-            );
-            return;
-        }
-
-        // Now we have the URL and user wants to record - get upload token and start
         try {
-            await getUploadTokenAndStartRecording({
-                windowId: windowId,
-                meetingUrl: meetingUrl,
-            });
-        } catch (e) {
-            console.error(
-                "[recall] failed to start recording in meeting-updated:",
-                e,
-            );
-            // Notify popup of error
-            if (meetingPopupWindow && !meetingPopupWindow.isDestroyed()) {
-                meetingPopupWindow.webContents.send(
-                    "meeting-popup:error",
-                    e.message,
+            const accessToken = await ensureAccessToken({ interactive: false });
+            if (!accessToken) {
+                console.log(
+                    "[recall] cannot register meeting URL (not authenticated)",
                 );
+                return;
             }
+
+            const recordingId = currentMeetingInfo.recordingId ?? null;
+            const sdkUploadId = currentMeetingInfo.sdkUploadId ?? null;
+            await api.registerMeetingUrl({
+                meetingUrl,
+                recordingId,
+                sdkUploadId,
+            });
+
+            currentMeetingInfo.lastRegisteredMeetingUrl = meetingUrl;
+            console.log("[recall] registered meeting URL");
+        } catch (e) {
+            console.error("[recall] failed to register meeting URL:", e);
         }
     });
 

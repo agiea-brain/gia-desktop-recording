@@ -10,7 +10,12 @@ module.exports = {
             unpackDir: "node_modules/@recallai",
         },
         // Ensure the tray icon and popup HTML are available at runtime when packaged.
-        extraResource: ["./src/assets/gia-tray.png", "./src/meeting-popup.html"],
+        extraResource: [
+            "./src/assets/gia-tray.png",
+            "./src/meeting-popup.html",
+            "./src/debug-controls.html",
+            "./src/debug-controls-renderer.js",
+        ],
         // Local packaging/dev: don't require code signing unless explicitly enabled.
         // Enable signing by running with: GIA_MAC_SIGN=1 npm run package
         osxSign: SHOULD_SIGN_MAC
