@@ -14,6 +14,32 @@ contextBridge.exposeInMainWorld("sdkLoggerBridge", {
 });
 
 contextBridge.exposeInMainWorld("electronAPI", {
+    log: {
+        debug: (...args) =>
+            ipcRenderer.send("app-log", {
+                level: "debug",
+                args,
+                context: { source: "renderer" },
+            }),
+        info: (...args) =>
+            ipcRenderer.send("app-log", {
+                level: "info",
+                args,
+                context: { source: "renderer" },
+            }),
+        warn: (...args) =>
+            ipcRenderer.send("app-log", {
+                level: "warn",
+                args,
+                context: { source: "renderer" },
+            }),
+        error: (...args) =>
+            ipcRenderer.send("app-log", {
+                level: "error",
+                args,
+                context: { source: "renderer" },
+            }),
+    },
     navigate: (page) => ipcRenderer.send("navigate", page),
     saveMeetingsData: (data) => ipcRenderer.invoke("saveMeetingsData", data),
     loadMeetingsData: () => ipcRenderer.invoke("loadMeetingsData"),

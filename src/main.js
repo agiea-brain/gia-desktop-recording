@@ -2,10 +2,12 @@ import RecallAiSdk from "@recallai/desktop-sdk";
 import {
     app,
     BrowserWindow,
+    dialog,
     ipcMain,
     Menu,
     nativeImage,
     shell,
+    systemPreferences,
     Tray,
 } from "electron";
 import * as fs from "fs";
@@ -18,12 +20,26 @@ import {
     getStoredAccessToken,
 } from "./utils/auth";
 import Api from "./utils/api";
+import logger from "./utils/logger";
+import * as dotenv from "dotenv";
+
+dotenv.config();
+
+logger.configure({
+    token: process.env.LOGFIRE_TOKEN,
+    serviceName: "desktop-sdk",
+    environment: process.env.LOGFIRE_ENVIRONMENT || "development",
+});
+logger.setBaseContext({
+    process: "main",
+});
+logger.info("[logfire] configured:", logger.isLogfireConfigured?.() ?? null);
 
 const api = new Api();
 
 // Toggle developer-only tray items.
 // Set to true locally when you want quick access to logs.
-const DEBUG = false;
+const DEBUG = process.env.DEBUG === "true";
 const START_ON_LOGIN = true;
 
 let loginInFlight = null;
@@ -39,36 +55,128 @@ let currentMeetingInfo = null; // { windowId, meetingUrl, uploadToken, recording
 let userWantsToRecord = false; // Set to true when user confirms they want to record
 let recordingStarted = false; // Ensures recording only starts once per meeting
 
+function readPermissionStates() {
+    // We currently request: accessibility, microphone, screen-capture
+    const platform = process.platform;
+
+    const getMediaStatus = (type) => {
+        try {
+            if (
+                platform === "darwin" &&
+                systemPreferences &&
+                typeof systemPreferences.getMediaAccessStatus === "function"
+            ) {
+                return systemPreferences.getMediaAccessStatus(type);
+            }
+        } catch {
+            // ignore
+        }
+        return "unsupported";
+    };
+
+    const getAccessibilityTrusted = () => {
+        try {
+            if (
+                platform === "darwin" &&
+                systemPreferences &&
+                typeof systemPreferences.isTrustedAccessibilityClient ===
+                    "function"
+            ) {
+                return Boolean(
+                    systemPreferences.isTrustedAccessibilityClient(false),
+                );
+            }
+        } catch {
+            // ignore
+        }
+        return null; // unknown / unsupported
+    };
+
+    return {
+        accessibility: getAccessibilityTrusted(), // true/false/null
+        microphone: getMediaStatus("microphone"), // granted/denied/not-determined/restricted/unknown
+        // Electron calls this media type "screen" (Recall SDK calls it "screen-capture").
+        screenCapture: getMediaStatus("screen"),
+    };
+}
+
+function setupPermissionLogging() {
+    let last = null;
+
+    const log = (reason = "unknown") => {
+        const next = readPermissionStates();
+
+        // Only log when something changed, unless it's the first run.
+        const changed =
+            !last ||
+            next.accessibility !== last.accessibility ||
+            next.microphone !== last.microphone ||
+            next.screenCapture !== last.screenCapture;
+
+        if (changed) {
+            logger.info("[permissions] state changed", {
+                reason,
+                permissions: next,
+            });
+            last = next;
+        }
+    };
+
+    // Initial snapshot
+    log("startup");
+
+    // Best-effort event for mic/cam (and sometimes screen) changes on macOS.
+    try {
+        if (
+            process.platform === "darwin" &&
+            systemPreferences &&
+            typeof systemPreferences.on === "function"
+        ) {
+            systemPreferences.on("media-access-change", (_event, mediaType) => {
+                if (
+                    mediaType === "microphone" ||
+                    mediaType === "camera" ||
+                    mediaType === "screen"
+                ) {
+                    log(`media-access-change:${mediaType}`);
+                }
+            });
+        }
+    } catch {
+        // ignore
+    }
+
+    // No reliable OS event for Accessibility / Screen Recording changes; re-check periodically
+    // and also when the app becomes active again.
+    app.on("activate", () => log("app:activate"));
+    app.on("browser-window-focus", () => log("app:browser-window-focus"));
+    app.on("resume", () => log("app:resume"));
+
+    setInterval(() => log("poll"), 2000).unref?.();
+}
+
 function setupFileLogging() {
     try {
         const logsDir = app.getPath("logs");
         logFilePath = path.join(logsDir, "gia.log");
         fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
-
-        const wrap = (method) => {
-            const original = console[method].bind(console);
-            console[method] = (...args) => {
-                original(...args);
-                try {
-                    if (logFilePath) {
-                        fs.appendFileSync(
-                            logFilePath,
-                            util.format(...args) + "\n",
-                            "utf8",
-                        );
-                    }
-                } catch {
-                    // ignore log write failures
-                }
-            };
-        };
-
-        wrap("log");
-        wrap("warn");
-        wrap("error");
+        logger.setLogFilePath(logFilePath);
     } catch {
         // ignore
     }
+}
+
+function setupAppLoggingIpc() {
+    // Renderer/popup processes send logs here so everything routes through Logfire.
+    ipcMain.on("app-log", (_event, payload) => {
+        logger.emitFromIpc({
+            ...(payload || {}),
+            context: {
+                source: payload?.context?.source || "renderer",
+                ...(payload?.context || {}),
+            },
+        });
+    });
 }
 
 function getTrayIconPath() {
@@ -99,13 +207,60 @@ function refreshTrayMenu() {
     tray.setContextMenu(buildTrayMenu());
 }
 
+async function showUploadTokenErrorDialog(error) {
+    try {
+        const parent =
+            BrowserWindow.getFocusedWindow() ||
+            (meetingPopupWindow && !meetingPopupWindow.isDestroyed()
+                ? meetingPopupWindow
+                : null);
+
+        const status =
+            typeof error?.status === "number"
+                ? error.status
+                : (() => {
+                      const msg =
+                          error instanceof Error
+                              ? error.message
+                              : typeof error === "string"
+                                ? error
+                                : "";
+                      const m = msg.match(/\((\d{3})\)/);
+                      return m ? Number(m[1]) : null;
+                  })();
+
+        const isForbidden = status === 403;
+
+        const detail =
+            error instanceof Error
+                ? error.message
+                : typeof error === "string"
+                  ? error
+                  : JSON.stringify(error);
+
+        await dialog.showMessageBox(parent ?? undefined, {
+            type: "error",
+            title: "Couldn’t start recording",
+            message: isForbidden
+                ? "Botless recordings are not enabled. Enable Botless Recordings in the platform to use this feature."
+                : "We couldn’t fetch an upload token. Please try again.",
+            detail,
+            buttons: ["OK"],
+            defaultId: 0,
+            noLink: true,
+        });
+    } catch {
+        // ignore dialog failures (e.g. app shutting down)
+    }
+}
+
 async function startMeetingRecordingWithAuth({ source = "unknown" } = {}) {
     if (!currentMeetingInfo) {
         throw new Error("No meeting information available");
     }
     if (isRecording) return;
 
-    console.log(`[recall] start recording requested (source=${source})`);
+    logger.info(`[recall] start recording requested (source=${source})`);
     userWantsToRecord = true;
     closeMeetingPopup();
     refreshTrayMenu();
@@ -120,7 +275,7 @@ async function startMeetingRecordingWithAuth({ source = "unknown" } = {}) {
         await registerCurrentMeetingUrlIfNeeded();
         await startMeetingRecording();
     } catch (error) {
-        console.error(
+        logger.error(
             `[recall] failed to start recording (source=${source}):`,
             error,
         );
@@ -154,7 +309,7 @@ function buildTrayMenu() {
                                   source: "tray",
                               });
                           } catch (e) {
-                              console.error(
+                              logger.error(
                                   "[tray] failed to start recording:",
                                   e,
                               );
@@ -174,7 +329,7 @@ function buildTrayMenu() {
                         await pauseMeetingRecording();
                     }
                 } catch (e) {
-                    console.error("[tray] failed to toggle pause:", e);
+                    logger.error("[tray] failed to toggle pause:", e);
                 }
             },
         },
@@ -185,7 +340,7 @@ function buildTrayMenu() {
                 try {
                     await stopMeetingRecording();
                 } catch (e) {
-                    console.error("[tray] failed to stop recording:", e);
+                    logger.error("[tray] failed to stop recording:", e);
                 } finally {
                     // Clear meeting state after the stop attempt to avoid stuck UI/state.
                     userWantsToRecord = false;
@@ -205,7 +360,7 @@ function buildTrayMenu() {
                           try {
                               showDebugControlsWindow({ focus: true });
                           } catch (e) {
-                              console.error(
+                              logger.error(
                                   "[tray] failed to show debug controls:",
                                   e,
                               );
@@ -223,7 +378,7 @@ function buildTrayMenu() {
                                       : logsDir;
                               await shell.openPath(target);
                           } catch (e) {
-                              console.error("[tray] failed to open logs:", e);
+                              logger.error("[tray] failed to open logs:", e);
                           }
                       },
                   },
@@ -303,11 +458,11 @@ function setCaptureState({ recording, paused }) {
 
 async function pauseMeetingRecording() {
     if (!isRecording) {
-        console.log("[recall] not recording, nothing to pause");
+        logger.info("[recall] not recording, nothing to pause");
         return;
     }
     if (isPaused) {
-        console.log("[recall] already paused");
+        logger.info("[recall] already paused");
         return;
     }
     if (!currentMeetingInfo?.windowId) {
@@ -315,17 +470,17 @@ async function pauseMeetingRecording() {
     }
     const { windowId } = currentMeetingInfo;
     await RecallAiSdk.pauseRecording({ windowId });
-    console.log("[recall] recording paused for windowId:", windowId);
+    logger.info("[recall] recording paused for windowId:", windowId);
     setCaptureState({ recording: true, paused: true });
 }
 
 async function resumeMeetingRecording() {
     if (!isRecording) {
-        console.log("[recall] not recording, nothing to resume");
+        logger.info("[recall] not recording, nothing to resume");
         return;
     }
     if (!isPaused) {
-        console.log("[recall] not paused");
+        logger.info("[recall] not paused");
         return;
     }
     if (!currentMeetingInfo?.windowId) {
@@ -333,7 +488,7 @@ async function resumeMeetingRecording() {
     }
     const { windowId } = currentMeetingInfo;
     await RecallAiSdk.resumeRecording({ windowId });
-    console.log("[recall] recording resumed for windowId:", windowId);
+    logger.info("[recall] recording resumed for windowId:", windowId);
     setCaptureState({ recording: true, paused: false });
 }
 
@@ -373,11 +528,11 @@ function getMeetingPopupPath() {
             process.resourcesPath,
             "meeting-popup.html",
         );
-        console.log("[popup] looking for popup at:", resourcePath);
+        logger.info("[popup] looking for popup at:", resourcePath);
         if (fs.existsSync(resourcePath)) {
             return resourcePath;
         }
-        console.error("[popup] popup HTML not found at:", resourcePath);
+        logger.error("[popup] popup HTML not found at:", resourcePath);
     }
 
     // In dev, try a few locations
@@ -391,7 +546,7 @@ function getMeetingPopupPath() {
     for (const p of candidates) {
         try {
             if (fs.existsSync(p)) {
-                console.log("[popup] found popup at:", p);
+                logger.info("[popup] found popup at:", p);
                 return p;
             }
         } catch {
@@ -399,7 +554,7 @@ function getMeetingPopupPath() {
         }
     }
 
-    console.error("[popup] popup HTML not found in any candidate path");
+    logger.error("[popup] popup HTML not found in any candidate path");
     return candidates[0];
 }
 
@@ -529,6 +684,23 @@ function showMeetingPopup() {
     // Load the popup HTML
     meetingPopupWindow.loadFile(popupPath);
 
+    // Send the Gia logo (as a data URL) to the popup so the asset
+    // path works in both dev and packaged builds.
+    meetingPopupWindow.webContents.on("did-finish-load", () => {
+        try {
+            const iconPath = getTrayIconPath();
+            const img = nativeImage.createFromPath(iconPath);
+            const dataUrl = img?.isEmpty?.() ? null : img.toDataURL();
+            if (meetingPopupWindow && !meetingPopupWindow.isDestroyed()) {
+                meetingPopupWindow.webContents.send("meeting-popup:logo", {
+                    dataUrl,
+                });
+            }
+        } catch (e) {
+            logger.error("[popup] failed to send logo:", e);
+        }
+    });
+
     // Center the window
     meetingPopupWindow.center();
 
@@ -564,9 +736,16 @@ async function getUploadTokenAndStoreInfo() {
 
     // Get upload token if we don't have it yet
     if (!currentMeetingInfo.uploadToken) {
-        console.log("[recall] requesting upload token...");
-        const uploadTokenData = await api.getUploadToken();
-        console.log("[recall] upload token data:", uploadTokenData);
+        logger.info("[recall] requesting upload token...");
+        let uploadTokenData;
+        try {
+            uploadTokenData = await api.getUploadToken();
+        } catch (error) {
+            logger.error("[recall] failed to get upload token:", error);
+            await showUploadTokenErrorDialog(error);
+            throw error;
+        }
+        logger.info("[recall] upload token data:", uploadTokenData);
 
         // Check both possible response formats - token may be nested
         let uploadToken;
@@ -582,17 +761,19 @@ async function getUploadTokenAndStoreInfo() {
         }
 
         if (!uploadToken) {
-            throw new Error(
+            const error = new Error(
                 `Upload token not found in response: ${JSON.stringify(uploadTokenData)}`,
             );
+            await showUploadTokenErrorDialog(error);
+            throw error;
         }
 
-        console.log("[recall] extracted upload token:", uploadToken);
+        logger.info("[recall] extracted upload token:", uploadToken);
         currentMeetingInfo.uploadToken = uploadToken;
 
         const recordingId = uploadTokenData.uploadToken?.recording_id ?? null;
         if (recordingId) {
-            console.log("[recall] extracted recording id:", recordingId);
+            logger.info("[recall] extracted recording id:", recordingId);
         }
         currentMeetingInfo.recordingId = recordingId;
 
@@ -604,7 +785,7 @@ async function getUploadTokenAndStoreInfo() {
             uploadTokenData.sdkUploadId ??
             null;
         if (sdkUploadId) {
-            console.log("[recall] extracted sdk upload id:", sdkUploadId);
+            logger.info("[recall] extracted sdk upload id:", sdkUploadId);
         }
         currentMeetingInfo.sdkUploadId = sdkUploadId;
     }
@@ -612,13 +793,13 @@ async function getUploadTokenAndStoreInfo() {
 
 async function registerCurrentMeetingUrlIfNeeded() {
     if (!currentMeetingInfo) {
-        console.log("[recall] register meeting URL skipped (no meeting info)");
+        logger.info("[recall] register meeting URL skipped (no meeting info)");
         return;
     }
 
     const meetingUrl = currentMeetingInfo.meetingUrl ?? null;
     if (!meetingUrl) {
-        console.log(
+        logger.info(
             "[recall] register meeting URL skipped (no meeting URL yet)",
         );
         return;
@@ -633,13 +814,13 @@ async function registerCurrentMeetingUrlIfNeeded() {
         now - (currentMeetingInfo.lastRegisterAttemptAt || 0) < 15_000;
 
     if (alreadyRegistered) {
-        console.log(
+        logger.info(
             "[recall] register meeting URL skipped (already registered)",
         );
         return;
     }
     if (recentlyAttemptedSameUrl) {
-        console.log("[recall] register meeting URL skipped (throttled)");
+        logger.info("[recall] register meeting URL skipped (throttled)");
         return;
     }
 
@@ -647,10 +828,10 @@ async function registerCurrentMeetingUrlIfNeeded() {
     currentMeetingInfo.lastRegisterAttemptAt = now;
 
     try {
-        console.log("[recall] registering meeting URL...");
+        logger.info("[recall] registering meeting URL...");
         const accessToken = await ensureAccessToken({ interactive: false });
         if (!accessToken) {
-            console.log(
+            logger.info(
                 "[recall] cannot register meeting URL (not authenticated)",
             );
             return;
@@ -665,9 +846,9 @@ async function registerCurrentMeetingUrlIfNeeded() {
         });
 
         currentMeetingInfo.lastRegisteredMeetingUrl = meetingUrl;
-        console.log("[recall] registered meeting URL");
+        logger.info("[recall] registered meeting URL");
     } catch (e) {
-        console.error("[recall] failed to register meeting URL:", e);
+        logger.error("[recall] failed to register meeting URL:", e);
     }
 }
 
@@ -677,7 +858,7 @@ async function startMeetingRecording() {
     }
 
     if (recordingStarted) {
-        console.log("[recall] recording already started, skipping");
+        logger.info("[recall] recording already started, skipping");
         return;
     }
 
@@ -687,8 +868,8 @@ async function startMeetingRecording() {
         throw new Error("No upload token available");
     }
 
-    console.log("[recall] starting recording with windowId:", windowId);
-    console.log("[recall] starting recording with uploadToken:", uploadToken);
+    logger.info("[recall] starting recording with windowId:", windowId);
+    logger.info("[recall] starting recording with uploadToken:", uploadToken);
 
     // Mark as started BEFORE the async call to prevent race conditions
     recordingStarted = true;
@@ -699,7 +880,7 @@ async function startMeetingRecording() {
             uploadToken: uploadToken,
         });
 
-        console.log("[recall] recording started successfully");
+        logger.info("[recall] recording started successfully");
         setCaptureState({ recording: true, paused: false });
 
         // Notify popup that recording started
@@ -717,13 +898,13 @@ async function startMeetingRecording() {
 
 async function stopMeetingRecording() {
     if (!isRecording) {
-        console.log("[recall] not recording, nothing to stop");
+        logger.info("[recall] not recording, nothing to stop");
         return;
     }
 
     // Need windowId to stop recording - use currentMeetingInfo if available
     if (!currentMeetingInfo || !currentMeetingInfo.windowId) {
-        console.warn(
+        logger.warn(
             "[recall] cannot stop recording: no meeting info or windowId",
         );
         // Recording might have already ended, just mark as not recording
@@ -736,20 +917,20 @@ async function stopMeetingRecording() {
     try {
         // Stop recording via SDK - try with windowId parameter
         await RecallAiSdk.stopRecording({ windowId });
-        console.log("[recall] recording stopped with windowId:", windowId);
+        logger.info("[recall] recording stopped with windowId:", windowId);
         setCaptureState({ recording: false, paused: false });
     } catch (error) {
         // If stopRecording with windowId fails, the recording might already be stopped
         // Check error message to see if it's because recording doesn't exist
         if (error.message && error.message.includes("Cannot destructure")) {
-            console.warn(
+            logger.warn(
                 "[recall] recording may have already ended, marking as stopped",
             );
             setCaptureState({ recording: false, paused: false });
             return;
         }
 
-        console.error("[recall] error stopping recording:", error);
+        logger.error("[recall] error stopping recording:", error);
         // Even if stopping fails, mark as not recording
         setCaptureState({ recording: false, paused: false });
         throw error;
@@ -762,7 +943,7 @@ async function setupMeetingPopupIpc() {
             throw new Error("No meeting information available");
         }
 
-        console.log("[meeting-popup] user confirmed recording");
+        logger.info("[meeting-popup] user confirmed recording");
         userWantsToRecord = true;
 
         // Close the popup immediately after the user confirms.
@@ -771,7 +952,7 @@ async function setupMeetingPopupIpc() {
         try {
             await startMeetingRecordingWithAuth({ source: "popup" });
         } catch (error) {
-            console.error("[meeting-popup] failed to start recording:", error);
+            logger.error("[meeting-popup] failed to start recording:", error);
             // Reset state so we don't get stuck in a "confirmed" flow on failure.
             userWantsToRecord = false;
             recordingStarted = false;
@@ -782,7 +963,7 @@ async function setupMeetingPopupIpc() {
     });
 
     ipcMain.handle("meeting-popup:decline-recording", async () => {
-        console.log("[meeting-popup] user declined recording");
+        logger.info("[meeting-popup] user declined recording");
         userWantsToRecord = false;
         recordingStarted = false;
         closeMeetingPopup();
@@ -797,7 +978,7 @@ async function setupMeetingPopupIpc() {
 
     ipcMain.handle("meeting-popup:end-recording", async () => {
         if (!isRecording) {
-            console.log("[meeting-popup] not recording, nothing to end");
+            logger.info("[meeting-popup] not recording, nothing to end");
             return;
         }
 
@@ -809,7 +990,7 @@ async function setupMeetingPopupIpc() {
             currentMeetingInfo = null;
             closeMeetingPopup();
         } catch (error) {
-            console.error("[meeting-popup] failed to end recording:", error);
+            logger.error("[meeting-popup] failed to end recording:", error);
             // Clear meeting info even on error to prevent stuck state
             userWantsToRecord = false;
             recordingStarted = false;
@@ -869,7 +1050,7 @@ async function setupDebugControlsIpc() {
             await shell.openPath(target);
             return { ok: true };
         } catch (e) {
-            console.error("[debug-controls] failed to open logs:", e);
+            logger.error("[debug-controls] failed to open logs:", e);
             return { ok: false };
         }
     });
@@ -907,6 +1088,7 @@ async function setupAuthIpc() {
 
 async function bootstrap() {
     await app.whenReady();
+    setupAppLoggingIpc();
 
     // Prevent app from quitting when all windows are closed (menu bar app)
     app.on("window-all-closed", (e) => {
@@ -920,13 +1102,13 @@ async function bootstrap() {
                 openAsHidden: true,
             });
         } catch (e) {
-            console.warn("[app] failed to set login item:", e);
+            logger.warn("[app] failed to set login item:", e);
         }
     }
 
     setupFileLogging();
-    console.log("[app] starting Gia");
-    console.log("[app] logs folder:", app.getPath("logs"));
+    logger.info("[app] starting Gia");
+    logger.info("[app] logs folder:", app.getPath("logs"));
 
     // macOS: run as a menu bar app (no dock icon).
     if (process.platform === "darwin") {
@@ -950,23 +1132,25 @@ async function bootstrap() {
 
     // Lightweight startup check (doesn't force an interactive login).
     const auth = await isAuthenticated();
-    console.log("[auth] authenticated:", auth.authenticated);
+    logger.info("[auth] authenticated:", auth.authenticated);
     api.setAuthToken(auth.accessToken);
 
     const shouldAutoLogin = true;
     if (!auth.authenticated && shouldAutoLogin) {
         try {
-            console.log("[auth] starting interactive login...");
+            logger.info("[auth] starting interactive login...");
             await ensureAccessToken({ interactive: true });
-            console.log("[auth] login complete");
+            logger.info("[auth] login complete");
         } catch (e) {
-            console.warn("[auth] login failed (continuing without auth):", e);
+            logger.warn("[auth] login failed (continuing without auth):", e);
         }
     }
 
     RecallAiSdk.init({
         api_url: "https://us-east-1.recall.ai",
     });
+
+    setupPermissionLogging();
 
     RecallAiSdk.requestPermission("accessibility");
     RecallAiSdk.requestPermission("microphone");
@@ -975,11 +1159,11 @@ async function bootstrap() {
     RecallAiSdk.addEventListener("meeting-detected", async (evt) => {
         const windowId = evt.window.id;
         const meetingPlatform = evt.window?.platform;
-        console.log("[recall] meeting-detected event:", evt.window);
-        console.log("[recall] window id:", windowId);
+        logger.info("[recall] meeting-detected event:", evt.window);
+        logger.info("[recall] window id:", windowId);
 
         if (meetingPlatform === "slack") {
-            console.log(
+            logger.info(
                 "[recall] slack meeting detected, skipping popup and recording",
             );
             return;
@@ -987,7 +1171,7 @@ async function bootstrap() {
 
         // Don't show popup if we're already recording
         if (isRecording) {
-            console.log(
+            logger.info(
                 "[recall] already recording, ignoring new meeting detection",
             );
             return;
@@ -998,7 +1182,7 @@ async function bootstrap() {
         recordingStarted = false;
 
         try {
-            console.log(
+            logger.info(
                 "[recall] meeting detected: initializing meeting state",
             );
             // Store meeting info. Important: do NOT call the API here.
@@ -1015,11 +1199,11 @@ async function bootstrap() {
             };
 
             // Show popup to ask if user wants to record
-            console.log("[recall] showing meeting popup...");
+            logger.info("[recall] showing meeting popup...");
             showMeetingPopup();
             refreshTrayMenu();
         } catch (e) {
-            console.error("[recall] meeting detection failed:", e);
+            logger.error("[recall] meeting detection failed:", e);
             currentMeetingInfo = null;
             refreshTrayMenu();
         }
@@ -1028,8 +1212,8 @@ async function bootstrap() {
     RecallAiSdk.addEventListener("meeting-updated", async (evt) => {
         const meetingUrl = evt.window?.url ?? null;
         const windowId = evt.window?.id ?? null;
-        console.log("[recall] meeting-updated event:", evt.window);
-        console.log("[recall] meeting-updated URL:", meetingUrl);
+        logger.info("[recall] meeting-updated event:", evt.window);
+        logger.info("[recall] meeting-updated URL:", meetingUrl);
 
         if (!meetingUrl) return;
 
@@ -1039,7 +1223,7 @@ async function bootstrap() {
             !windowId ||
             currentMeetingInfo.windowId !== windowId
         ) {
-            console.log(
+            logger.info(
                 "[recall] meeting-updated ignored (no current meeting or window mismatch)",
             );
             return;
@@ -1047,13 +1231,13 @@ async function bootstrap() {
 
         // Always keep the latest meeting URL, but only call the API after user confirms.
         currentMeetingInfo.meetingUrl = meetingUrl;
-        console.log(
+        logger.info(
             "[recall] stored meeting URL (confirmed=%s)",
             userWantsToRecord,
         );
 
         if (!userWantsToRecord) {
-            console.log(
+            logger.info(
                 "[recall] deferring meeting URL registration until confirm",
             );
             return;
@@ -1063,16 +1247,16 @@ async function bootstrap() {
     });
 
     RecallAiSdk.addEventListener("sdk-state-change", async (evt) => {
-        console.log("[recall] sdk-state-change event:", evt.sdk.state.code);
+        logger.info("[recall] sdk-state-change event:", evt.sdk.state.code);
         switch (evt.sdk.state.code) {
             case "recording":
-                console.log("[recall] SDK is recording");
+                logger.info("[recall] SDK is recording");
                 if (!isRecording || isPaused) {
                     setCaptureState({ recording: true, paused: false });
                 }
                 break;
             case "idle":
-                console.log("[recall] SDK is idle");
+                logger.info("[recall] SDK is idle");
                 // The SDK doesn't currently expose a distinct "paused" state/event in all versions.
                 // If we initiated a pause, we treat idle as "paused" to avoid resetting meeting state.
                 if (isPaused) {
@@ -1083,7 +1267,7 @@ async function bootstrap() {
                 setCaptureState({ recording: false, paused: false });
                 // Close popup when meeting ends (goes to idle)
                 if (meetingPopupWindow && !meetingPopupWindow.isDestroyed()) {
-                    console.log("[recall] closing popup due to idle state");
+                    logger.info("[recall] closing popup due to idle state");
                     meetingPopupWindow.webContents.send(
                         "meeting-popup:recording-ended",
                     );
@@ -1098,17 +1282,17 @@ async function bootstrap() {
                 refreshTrayMenu();
                 break;
             default:
-                console.log("[recall] SDK state:", evt.sdk.state.code);
+                logger.info("[recall] SDK state:", evt.sdk.state.code);
         }
     });
 
     RecallAiSdk.addEventListener("recording-ended", async (evt) => {
-        console.log("[recall] recording-ended event received");
-        console.log("[recall] Uploaded", evt.window);
+        logger.info("[recall] recording-ended event received");
+        logger.info("[recall] Uploaded", evt.window);
         setCaptureState({ recording: false, paused: false });
         // Close popup when recording ends
         if (meetingPopupWindow && !meetingPopupWindow.isDestroyed()) {
-            console.log("[recall] closing popup due to recording-ended");
+            logger.info("[recall] closing popup due to recording-ended");
             meetingPopupWindow.webContents.send(
                 "meeting-popup:recording-ended",
             );
@@ -1128,5 +1312,5 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
-    console.error("Fatal bootstrap error:", err);
+    logger.error("Fatal bootstrap error:", err);
 });

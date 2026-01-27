@@ -62,12 +62,27 @@
                 padding: 24px;
                 -webkit-app-region: no-drag;
             }
+
+            .header-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 8px;
+            }
+
+            .gia-logo {
+                width: 22px;
+                height: 22px;
+                border-radius: 6px;
+                object-fit: contain;
+                flex: 0 0 auto;
+            }
             
             h1 {
                 font-size: 16px;
                 font-weight: 600;
                 color: #000;
-                margin-bottom: 8px;
+                margin-bottom: 0;
             }
             
             p {
@@ -170,7 +185,10 @@
         </div>
         
         <div class="container">
-            <h1 id="title">Record this meeting?</h1>
+            <div class="header-row">
+                <img class="gia-logo" id="giaLogo" alt="Gia" />
+                <h1 id="title">Record this meeting?</h1>
+            </div>
             <p id="message">A meeting has been detected.</p>
             
             <div class="recording-status" id="recordingStatus">
@@ -190,12 +208,52 @@
         
         <script>
             const { ipcRenderer } = require('electron');
+
+            // Route popup logs through main-process Logfire.
+            (() => {
+                const send = (level, ...args) =>
+                    ipcRenderer.send("app-log", {
+                        level,
+                        args,
+                        context: { source: "meeting-popup" },
+                    });
+
+                const original = {
+                    log: console.log?.bind(console),
+                    info: console.info?.bind(console),
+                    warn: console.warn?.bind(console),
+                    error: console.error?.bind(console),
+                    debug: console.debug?.bind(console),
+                };
+
+                console.log = (...args) => {
+                    original.log?.(...args);
+                    send("info", ...args);
+                };
+                console.info = (...args) => {
+                    original.info?.(...args);
+                    send("info", ...args);
+                };
+                console.warn = (...args) => {
+                    original.warn?.(...args);
+                    send("warn", ...args);
+                };
+                console.error = (...args) => {
+                    original.error?.(...args);
+                    send("error", ...args);
+                };
+                console.debug = (...args) => {
+                    original.debug?.(...args);
+                    send("debug", ...args);
+                };
+            })();
             
             const titleEl = document.getElementById('title');
             const messageEl = document.getElementById('message');
             const recordingStatusEl = document.getElementById('recordingStatus');
             const initialButtonsEl = document.getElementById('initialButtons');
             const recordingButtonsEl = document.getElementById('recordingButtons');
+            const giaLogoEl = document.getElementById('giaLogo');
             const confirmBtn = document.getElementById('confirmBtn');
             const declineBtn = document.getElementById('declineBtn');
             const endBtn = document.getElementById('endBtn');
@@ -258,6 +316,17 @@
                 recordingButtonsEl.style.display = 'flex';
                 confirmBtn.disabled = false;
                 declineBtn.disabled = false;
+            });
+
+            // Receive the Gia logo from main (data URL), so it works in packaged builds.
+            ipcRenderer.on('meeting-popup:logo', (_event, payload) => {
+                const dataUrl = payload?.dataUrl;
+                if (typeof dataUrl === 'string' && dataUrl.length > 0) {
+                    giaLogoEl.src = dataUrl;
+                    giaLogoEl.style.display = 'block';
+                } else {
+                    giaLogoEl.style.display = 'none';
+                }
             });
             
             ipcRenderer.on('meeting-popup:recording-ended', () => {

@@ -1,6 +1,41 @@
 // Import styles
 import './styles.css';
 
+// Route renderer logs through main-process Logfire (via preload bridge).
+(() => {
+  const log = window?.electronAPI?.log;
+  if (!log) return;
+
+  const original = {
+    log: console.log?.bind(console),
+    info: console.info?.bind(console),
+    warn: console.warn?.bind(console),
+    error: console.error?.bind(console),
+    debug: console.debug?.bind(console),
+  };
+
+  console.log = (...args) => {
+    original.log?.(...args);
+    log.info(...args);
+  };
+  console.info = (...args) => {
+    original.info?.(...args);
+    log.info(...args);
+  };
+  console.warn = (...args) => {
+    original.warn?.(...args);
+    log.warn(...args);
+  };
+  console.error = (...args) => {
+    original.error?.(...args);
+    log.error(...args);
+  };
+  console.debug = (...args) => {
+    original.debug?.(...args);
+    log.debug(...args);
+  };
+})();
+
 // Initialize the markdown editor when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize SimpleMDE Markdown Editor

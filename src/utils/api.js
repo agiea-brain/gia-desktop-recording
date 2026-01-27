@@ -1,23 +1,16 @@
+import * as dotenv from "dotenv";
+dotenv.config();
+
+const API_URL = process.env.API_URL || "http://localhost:8080";
+
 const apiRoutes = {
     getUploadToken: "/api/content/recall/upload-token/",
     registerMeetingUrl: "/api/content/recall/register-meeting-url/",
 };
 
-const ENVIRONMENT = "development";
-
-function getApiUrl() {
-    if (ENVIRONMENT === "local") {
-        return "http://localhost:8080";
-    } else if (ENVIRONMENT === "production") {
-        return "https://api.myagiea.com";
-    } else {
-        return "https://r0ng0htend.execute-api.us-east-2.amazonaws.com/stage";
-    }
-}
-
 class Api {
     constructor() {
-        this.apiUrl = getApiUrl();
+        this.apiUrl = API_URL;
         this.authToken = null;
     }
 
@@ -42,9 +35,13 @@ class Api {
         );
         if (!response.ok) {
             const body = await response.text().catch(() => "");
-            throw new Error(
+            const err = new Error(
                 `Failed to get upload token (${response.status}): ${body}`,
             );
+            // Attach structured metadata for better error handling upstream.
+            err.status = response.status;
+            err.body = body;
+            throw err;
         }
         const data = (await response.json()) || {};
         // Return the full data object so we can check for both uploadToken and upload_token
