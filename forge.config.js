@@ -20,13 +20,11 @@ module.exports = {
         // Enable signing by running with: GIA_MAC_SIGN=1 npm run package
         osxSign: SHOULD_SIGN_MAC
             ? {
-                  continueOnError: false,
                   optionsForFile: (_) => {
-                      // Here, we keep it simple and return a single entitlements.plist file.
-                      // You can use this callback to map different sets of entitlements
-                      // to specific files in your packaged app.
                       return {
                           entitlements: "./Entitlements.plist",
+                          "entitlements-inherit": "./Entitlements.plist",
+                          "hardened-runtime": true,
                       };
                   },
               }
