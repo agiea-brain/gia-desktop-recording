@@ -3,6 +3,10 @@
     "productName": "Gia",
     "version": "1.0.0",
     "description": "Gia",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/agiea-brain/gia-desktop-recording.git"
+    },
     "main": ".webpack/main",
     "scripts": {
         "start": "concurrently \"npm run start:server\" \"npm run start:electron\"",

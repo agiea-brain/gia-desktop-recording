@@ -12,7 +12,6 @@ import {
 } from "electron";
 import * as fs from "fs";
 import * as path from "path";
-import * as util from "util";
 import {
     isAuthenticated,
     login,
@@ -34,6 +33,32 @@ logger.setBaseContext({
     process: "main",
 });
 logger.info("[logfire] configured:", logger.isLogfireConfigured?.() ?? null);
+
+function setupAutoUpdates() {
+    // Option A: GitHub Releases + update.electronjs.org.
+    // Only run in packaged mac builds (autoUpdater will not work in dev).
+    if (!app.isPackaged) return;
+    if (process.platform !== "darwin") return;
+
+    import("update-electron-app")
+        .then(({ updateElectronApp, UpdateSourceType }) => {
+            updateElectronApp({
+                updateSource: {
+                    type: UpdateSourceType.ElectronPublicUpdateService,
+                    repo: "agiea-brain/gia-desktop-recording",
+                },
+                logger: {
+                    log: (...args) => logger.info("[auto-update]", ...args),
+                },
+            });
+            logger.info("[auto-update] update-electron-app initialized");
+        })
+        .catch((err) => {
+            logger.error("[auto-update] failed to initialize", err);
+        });
+}
+
+setupAutoUpdates();
 
 const api = new Api();
 
