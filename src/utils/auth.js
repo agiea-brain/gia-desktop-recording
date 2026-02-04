@@ -3,6 +3,7 @@ import http from "http";
 import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
+import { loadEnv } from "./load-env";
 
 /**
  * Auth0 OAuth (Authorization Code + PKCE) helper for Electron main-process.
@@ -11,6 +12,9 @@ import path from "path";
  * - Allowed Callback URLs must include the redirect URI you use here.
  *   Default in this file: http://127.0.0.1:47823/callback
  */
+
+// Ensure env is loaded before reading process.env into defaults.
+loadEnv();
 
 const DEFAULTS = {
     domain: process.env.AUTH0_DOMAIN || "auth.myagiea.com",
@@ -123,11 +127,11 @@ async function startLoopbackCallbackServer({ host, port, callbackPath }) {
                 });
                 if (error) {
                     res.end(
-                        `<h2>Login failed</h2><p>${error}</p><pre>${errorDescription || ""}</pre><p>You can close this window.</p>`
+                        `<h2>Login failed</h2><p>${error}</p><pre>${errorDescription || ""}</pre><p>You can close this window.</p>`,
                     );
                 } else {
                     res.end(
-                        `<h2>Login complete</h2><p>You can close this window and return to the app.</p>`
+                        `<h2>Login complete</h2><p>You can close this window and return to the app.</p>`,
                     );
                 }
 
@@ -242,7 +246,7 @@ export async function login({
     const state = crypto.randomUUID();
     const codeVerifier = randomString(64);
     const codeChallenge = base64url(
-        crypto.createHash("sha256").update(codeVerifier).digest()
+        crypto.createHash("sha256").update(codeVerifier).digest(),
     );
 
     const authUrl =
@@ -290,7 +294,7 @@ export async function login({
                     callback.errorDescription
                         ? ` (${callback.errorDescription})`
                         : ""
-                }`
+                }`,
             );
         }
 

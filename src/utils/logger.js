@@ -1,12 +1,30 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as util from "util";
-import * as logfire from "logfire";
 
 let logFilePath = null;
 let baseContext = {};
 let teeToConsole = true;
-let logfireConfigured = false;
+let loggingApiUrl = null;
+let remoteLoggingConfigured = false;
+let traceEnabled = true;
+let traceFlags = "01";
+let currentTrace = {
+    traceId: null,
+    spanId: null,
+    traceparent: null,
+};
+let traceStartInFlight = null;
+let bufferedRemotePayloads = [];
+const MAX_BUFFERED_REMOTE_PAYLOADS = 100;
+
+function normalizeUserId(ctx) {
+    if (!ctx || typeof ctx !== "object") return null;
+    if (typeof ctx.userId === "string" && ctx.userId.length) return ctx.userId;
+    if (typeof ctx.user_id === "string" && ctx.user_id.length) return ctx.user_id;
+    if (typeof ctx.uid === "string" && ctx.uid.length) return ctx.uid;
+    return null;
+}
 
 function safeJson(value) {
     try {
@@ -36,15 +54,111 @@ function appendToFile(line) {
     }
 }
 
-function escapeLogfireMessage(msg) {
-    // Logfire uses {field} message templates; util.format of objects includes `{ ... }`
-    // which triggers "Formatting error: The field ... is not defined."
-    return String(msg).replaceAll("{", "{{").replaceAll("}", "}}");
+function toApiLevel(level) {
+    if (level === "error") return "error";
+    if (level === "warn") return "warning";
+    return "info"; // debug/info fall back to info
+}
+
+function isHex(str, len) {
+    return (
+        typeof str === "string" &&
+        str.length === len &&
+        /^[0-9a-f]+$/i.test(str)
+    );
+}
+
+function buildTraceparent(traceId, spanId, flags) {
+    if (!isHex(traceId, 32)) return null;
+    if (!isHex(spanId, 16)) return null;
+    const fl = typeof flags === "string" && /^[0-9a-f]{2}$/i.test(flags) ? flags : "01";
+    return `00-${traceId.toLowerCase()}-${spanId.toLowerCase()}-${fl.toLowerCase()}`;
+}
+
+function setCurrentTraceFromResponse(data) {
+    try {
+        if (!data || typeof data !== "object") return;
+        // Prefer explicit traceparent if provided by API in the future.
+        if (typeof data.traceparent === "string" && data.traceparent.length) {
+            currentTrace = { traceId: null, spanId: null, traceparent: data.traceparent };
+            return;
+        }
+        const traceId = typeof data.trace_id === "string" ? data.trace_id : null;
+        const spanId = typeof data.span_id === "string" ? data.span_id : null;
+        const tp = buildTraceparent(traceId, spanId, traceFlags);
+        if (!tp) return;
+        currentTrace = { traceId, spanId, traceparent: tp };
+    } catch {
+        // ignore
+    }
+}
+
+function postToLoggingApi(
+    payload,
+    { traceparentOverride = null, startTrace = false } = {},
+) {
+    if (!remoteLoggingConfigured || !loggingApiUrl) return;
+    try {
+        const fetchFn = globalThis.fetch;
+        if (typeof fetchFn !== "function") return;
+
+        const controller =
+            typeof AbortController === "function"
+                ? new AbortController()
+                : null;
+        const timeout = controller
+            ? setTimeout(() => controller.abort(), 2500)
+            : null;
+
+        const traceparentToSend =
+            typeof traceparentOverride === "string" && traceparentOverride.length
+                ? traceparentOverride
+                : null;
+
+        const headers = { "content-type": "application/json" };
+        if (!startTrace && traceparentToSend) {
+            headers.traceparent = traceparentToSend;
+        }
+
+        const bodyPayload = startTrace ? { ...(payload || {}), trace: true } : payload;
+
+        // Fire-and-forget. Never let remote logging crash the app.
+        const p = Promise.resolve(
+            fetchFn(loggingApiUrl, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(bodyPayload),
+                signal: controller?.signal,
+            }),
+        )
+            .catch(() => {})
+            .finally(() => {
+                if (timeout) clearTimeout(timeout);
+            });
+        return p;
+    } catch {
+        // ignore
+    }
 }
 
 function emit(level, args, context) {
     const msg = formatArgs(args);
     const mergedContext = { ...baseContext, ...(context || {}) };
+    // Ensure userId is present on every log (null if unknown).
+    const userId = normalizeUserId(mergedContext);
+    mergedContext.userId = userId;
+    mergedContext.user_id = userId;
+
+    // Allow per-log override: `traceparent` / `traceParent` in context.
+    const traceparentOverrideRaw =
+        mergedContext.traceparent || mergedContext.traceParent || null;
+    const traceparentOverride =
+        typeof traceparentOverrideRaw === "string" && traceparentOverrideRaw.length
+            ? traceparentOverrideRaw
+            : null;
+    // Don't include trace plumbing in properties by default.
+    delete mergedContext.traceparent;
+    delete mergedContext.traceParent;
 
     if (teeToConsole) {
         try {
@@ -52,7 +166,8 @@ function emit(level, args, context) {
                 (typeof console?.[level] === "function" && console[level]) ||
                 (typeof console?.log === "function" && console.log);
             if (fn) {
-                if (Object.keys(mergedContext).length) fn(...args, mergedContext);
+                if (Object.keys(mergedContext).length)
+                    fn(...args, mergedContext);
                 else fn(...args);
             }
         } catch {
@@ -68,49 +183,83 @@ function emit(level, args, context) {
         }`,
     );
 
-    // Be conservative with the JS SDK call signature: message first, context second.
-    // If the installed Logfire SDK differs, we still want logging to never crash the app.
-    try {
-        // logfire uses `warning`, not `warn`
-        const logfireLevel = level === "warn" ? "warning" : level;
-        const fn =
-            (typeof logfire[logfireLevel] === "function" && logfire[logfireLevel]) ||
-            (typeof logfire.info === "function" && logfire.info);
-        if (fn) {
-            fn(escapeLogfireMessage(msg), mergedContext);
-        }
-    } catch {
-        // ignore Logfire failures (network, misconfig, API mismatch)
+    const remotePayload = {
+        message: msg,
+        level: toApiLevel(level),
+        properties: {
+            ...mergedContext,
+            userId,
+            user_id: userId,
+            originalLevel: level,
+        },
+    };
+
+    // If caller explicitly supplies a traceparent, always use it immediately.
+    if (traceparentOverride) {
+        postToLoggingApi(remotePayload, { traceparentOverride });
+        return;
     }
+
+    // If a trace is being created, buffer logs so we don't accidentally start multiple traces
+    // during app startup / bursts of logging.
+    if (traceEnabled && !currentTrace?.traceparent) {
+        if (traceStartInFlight) {
+            if (bufferedRemotePayloads.length < MAX_BUFFERED_REMOTE_PAYLOADS) {
+                bufferedRemotePayloads.push(remotePayload);
+            }
+            return;
+        }
+
+        traceStartInFlight = Promise.resolve(
+            postToLoggingApi(remotePayload, { startTrace: true }),
+        )
+            .then(async (res) => {
+                if (!res || !res.ok) return;
+                const data = await res.json().catch(() => null);
+                setCurrentTraceFromResponse(data);
+            })
+            .catch(() => {})
+            .finally(() => {
+                const tp = currentTrace?.traceparent || null;
+                const toFlush = bufferedRemotePayloads;
+                bufferedRemotePayloads = [];
+                traceStartInFlight = null;
+                // Flush buffered logs continuing the trace if we have one.
+                for (const p of toFlush) {
+                    postToLoggingApi(p, { traceparentOverride: tp });
+                }
+            });
+
+        return;
+    }
+
+    postToLoggingApi(remotePayload, { traceparentOverride: currentTrace?.traceparent || null });
 }
 
 const logger = {
     configure(options = {}) {
-        try {
-            // logfire@0.12.x exposes `configureLogfireApi` (no `configure` export).
-            // Keep backwards compatibility if a newer/older SDK changes again.
-            if (typeof logfire.configure === "function") {
-                logfire.configure(options);
-                logfireConfigured = true;
-                return;
-            }
-            if (typeof logfire.configureLogfireApi === "function") {
-                logfire.configureLogfireApi(options);
-                logfireConfigured = true;
-                return;
-            }
-            if (typeof logfire.default?.configureLogfireApi === "function") {
-                logfire.default.configureLogfireApi(options);
-                logfireConfigured = true;
-                return;
-            }
-        } catch {
-            // ignore
+        // Accept either `apiUrl` or `loggingApiUrl` for convenience.
+        const apiUrl = options.apiUrl || options.loggingApiUrl || null;
+        loggingApiUrl =
+            typeof apiUrl === "string" && apiUrl.length ? apiUrl : null;
+        remoteLoggingConfigured = Boolean(loggingApiUrl);
+
+        if (typeof options.enableTraces === "boolean") {
+            traceEnabled = options.enableTraces;
+        }
+        if (typeof options.traceFlags === "string" && /^[0-9a-f]{2}$/i.test(options.traceFlags)) {
+            traceFlags = options.traceFlags.toLowerCase();
         }
     },
 
     setBaseContext(ctx = {}) {
         baseContext = { ...(ctx || {}) };
+    },
+
+    setUserId(userId) {
+        const normalized =
+            typeof userId === "string" && userId.length ? userId : null;
+        baseContext = { ...(baseContext || {}), userId: normalized, user_id: normalized };
     },
 
     setLogFilePath(p) {
@@ -121,8 +270,20 @@ const logger = {
         teeToConsole = Boolean(enabled);
     },
 
-    isLogfireConfigured() {
-        return logfireConfigured;
+    // Tracing helpers
+    getTraceparent() {
+        return currentTrace?.traceparent || null;
+    },
+    setTraceparent(traceparent) {
+        const tp = typeof traceparent === "string" && traceparent.length ? traceparent : null;
+        currentTrace = { traceId: null, spanId: null, traceparent: tp };
+    },
+    clearTrace() {
+        currentTrace = { traceId: null, spanId: null, traceparent: null };
+    },
+
+    isRemoteLoggingConfigured() {
+        return remoteLoggingConfigured;
     },
 
     debug(...args) {
@@ -141,7 +302,10 @@ const logger = {
     // For IPC: accept an args array already packed.
     emitFromIpc({ level = "info", args = [], context = {} } = {}) {
         const safeLevel =
-            level === "debug" || level === "info" || level === "warn"
+            level === "debug" ||
+            level === "info" ||
+            level === "warn" ||
+            level === "error"
                 ? level
                 : "error";
         emit(safeLevel, Array.isArray(args) ? args : [args], context);

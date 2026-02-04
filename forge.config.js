@@ -2,10 +2,14 @@ const { FusesPlugin } = require("@electron-forge/plugin-fuses");
 const { FuseV1Options, FuseVersion } = require("@electron/fuses");
 
 const SHOULD_SIGN_MAC = process.env.GIA_MAC_SIGN === "1";
+const SHOULD_NOTARIZE_MAC = process.env.GIA_MAC_NOTARIZE === "1";
+const MAC_BUNDLE_ID =
+    process.env.GIA_MAC_BUNDLE_ID || "com.gia.desktop-recording";
 
 module.exports = {
     packagerConfig: {
         name: "Gia",
+        appBundleId: MAC_BUNDLE_ID,
         asar: {
             unpackDir: "node_modules/@recallai",
         },
@@ -20,15 +24,31 @@ module.exports = {
         // Enable signing by running with: GIA_MAC_SIGN=1 npm run package
         osxSign: SHOULD_SIGN_MAC
             ? {
+                  continueOnError: false,
+                  identity:
+                      process.env.GIA_MAC_SIGN_IDENTITY ||
+                      undefined /* auto-detect if omitted */,
+                  keychain: process.env.GIA_MAC_KEYCHAIN || undefined,
                   optionsForFile: (_) => {
                       return {
                           entitlements: "./Entitlements.plist",
                           "entitlements-inherit": "./Entitlements.plist",
                           "hardened-runtime": true,
+                          hardenedRuntime: true,
                       };
                   },
               }
             : false,
+        // osxNotarize:
+        //     SHOULD_SIGN_MAC && SHOULD_NOTARIZE_MAC
+        //         ? {
+        //               tool: "notarytool",
+        //               appBundleId: MAC_BUNDLE_ID,
+        //               appleApiKey: process.env.APPLE_API_KEY_PATH,
+        //               appleApiKeyId: process.env.APPLE_API_KEY_ID,
+        //               appleApiIssuer: process.env.APPLE_API_ISSUER_ID,
+        //           }
+        //         : false,
         // App icon (macOS .icns). Forge expects the path WITHOUT the extension.
         icon: "./src/assets/gia-app",
         extendInfo: {

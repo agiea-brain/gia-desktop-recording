@@ -12,6 +12,7 @@ import {
 } from "electron";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import {
     isAuthenticated,
     login,
@@ -20,19 +21,23 @@ import {
 } from "./utils/auth";
 import Api from "./utils/api";
 import logger from "./utils/logger";
-import * as dotenv from "dotenv";
+import { loadEnv } from "./utils/load-env";
 
-dotenv.config();
+loadEnv();
 
 logger.configure({
-    token: process.env.LOGFIRE_TOKEN,
-    serviceName: "desktop-sdk",
-    environment: process.env.LOGFIRE_ENVIRONMENT || "development",
+    apiUrl: "https://r0ng0htend.execute-api.us-east-2.amazonaws.com/stage/desktop-sdk-logger",
 });
 logger.setBaseContext({
     process: "main",
+    service: "desktop-sdk",
+    userId: null,
+    user_id: null,
 });
-logger.info("[logfire] configured:", logger.isLogfireConfigured?.() ?? null);
+logger.info(
+    "[logging] remote configured:",
+    logger.isRemoteLoggingConfigured?.() ?? null,
+);
 
 function setupAutoUpdates() {
     // Option A: GitHub Releases + update.electronjs.org.
@@ -79,6 +84,101 @@ let debugControlsWindow = null;
 let currentMeetingInfo = null; // { windowId, meetingUrl, uploadToken, recordingId, sdkUploadId, lastRegisteredMeetingUrl, lastRegisterAttemptUrl, lastRegisterAttemptAt }
 let userWantsToRecord = false; // Set to true when user confirms they want to record
 let recordingStarted = false; // Ensures recording only starts once per meeting
+
+let userProfileFetchInFlight = null;
+let userProfileToken = null;
+let cachedUserId = null;
+
+let desktopDiagnosticsInFlight = null;
+let desktopDiagnosticsToken = null;
+
+function buildPlatformString() {
+    // Keep it stable + human-readable.
+    // Example: "darwin 25.0.0 (arm64)"
+    try {
+        return `${process.platform} ${os.release()} (${os.arch()})`;
+    } catch {
+        return `${process.platform}`;
+    }
+}
+
+function buildAppVersionString() {
+    try {
+        // Electron app version (typically package.json version).
+        return typeof app.getVersion === "function" ? app.getVersion() : null;
+    } catch {
+        return null;
+    }
+}
+
+async function sendDesktopSdkDiagnosticsIfNeeded() {
+    const token = api?.authToken || null;
+    if (!token) return;
+
+    // Only send once per token value.
+    if (desktopDiagnosticsToken === token) return;
+    if (desktopDiagnosticsInFlight) return await desktopDiagnosticsInFlight;
+
+    desktopDiagnosticsInFlight = (async () => {
+        try {
+            await api.updateDesktopSdkDiagnostics({
+                timestamp: new Date(),
+                platform: buildPlatformString(),
+                version: buildAppVersionString(),
+            });
+            desktopDiagnosticsToken = token;
+            logger.info("[auth] desktop sdk diagnostics updated");
+        } catch (e) {
+            // Best-effort only: never block auth on diagnostics.
+            logger.warn("[auth] failed to update desktop sdk diagnostics", e);
+        } finally {
+            desktopDiagnosticsInFlight = null;
+        }
+    })();
+
+    return await desktopDiagnosticsInFlight;
+}
+
+async function syncUserIdFromProfile() {
+    const token = api?.authToken || null;
+    if (!token) {
+        cachedUserId = null;
+        userProfileToken = null;
+        logger.setUserId(null);
+        return null;
+    }
+
+    // Avoid refetching if token hasn't changed and we already have a user id.
+    if (userProfileToken === token && cachedUserId) {
+        logger.setUserId(cachedUserId);
+        return cachedUserId;
+    }
+
+    // De-dupe concurrent fetches for the same token.
+    if (userProfileFetchInFlight && userProfileToken === token) {
+        return await userProfileFetchInFlight;
+    }
+
+    userProfileToken = token;
+    userProfileFetchInFlight = (async () => {
+        try {
+            const profile = await api.getUserProfile();
+            const uid = typeof profile?._id === "string" ? profile._id : null;
+            cachedUserId = uid;
+            logger.setUserId(uid);
+            return uid;
+        } catch (e) {
+            cachedUserId = null;
+            logger.setUserId(null);
+            logger.warn("[auth] failed to fetch user profile for userId", e);
+            return null;
+        } finally {
+            userProfileFetchInFlight = null;
+        }
+    })();
+
+    return await userProfileFetchInFlight;
+}
 
 function readPermissionStates() {
     // We currently request: accessibility, microphone, screen-capture
@@ -268,7 +368,7 @@ async function showUploadTokenErrorDialog(error) {
             title: "Couldn’t start recording",
             message: isForbidden
                 ? "Botless recordings are not enabled. Enable Botless Recordings in the platform to use this feature."
-                : "We couldn’t fetch an upload token. Please try again.",
+                : "We couldn’t start the recording. Please try again. If the problem persists, please contact support.",
             detail,
             buttons: ["OK"],
             defaultId: 0,
@@ -290,6 +390,10 @@ async function startMeetingRecordingWithAuth({ source = "unknown" } = {}) {
     closeMeetingPopup();
     refreshTrayMenu();
 
+    logger.info(
+        `[recall] currentMeetingInfo: ${JSON.stringify(currentMeetingInfo)}`,
+    );
+
     try {
         const accessToken = await ensureAccessToken({ interactive: true });
         if (!accessToken) {
@@ -297,7 +401,9 @@ async function startMeetingRecordingWithAuth({ source = "unknown" } = {}) {
         }
 
         await getUploadTokenAndStoreInfo();
+        logger.info(`[recall] uploadToken: ${currentMeetingInfo.uploadToken}`);
         await registerCurrentMeetingUrlIfNeeded();
+        logger.info(`[recall] registered meeting URL`);
         await startMeetingRecording();
     } catch (error) {
         logger.error(
@@ -518,16 +624,20 @@ async function resumeMeetingRecording() {
 }
 
 async function ensureAccessToken({ interactive = false, loginOpts = {} } = {}) {
+    logger.info(`[recall] ensureAccessToken: ${JSON.stringify(loginOpts)}`);
     // First try: stored/refreshable token (no UI)
     const stored = await getStoredAccessToken({ allowRefresh: true });
     if (stored?.access_token) {
         api.setAuthToken(stored.access_token);
+        await syncUserIdFromProfile();
+        sendDesktopSdkDiagnosticsIfNeeded();
         return stored.access_token;
     }
 
     // No token available and we're not allowed to open UI
     if (!interactive) {
         api.setAuthToken(null);
+        await syncUserIdFromProfile();
         return null;
     }
 
@@ -537,11 +647,15 @@ async function ensureAccessToken({ interactive = false, loginOpts = {} } = {}) {
             await login(loginOpts);
             const after = await getStoredAccessToken({ allowRefresh: true });
             api.setAuthToken(after?.access_token || null);
+            await syncUserIdFromProfile();
+            sendDesktopSdkDiagnosticsIfNeeded();
             return after?.access_token || null;
         })().finally(() => {
             loginInFlight = null;
         });
     }
+
+    logger.info(`[recall] loginInFlight: ${loginInFlight}`);
 
     return await loginInFlight;
 }
@@ -1085,6 +1199,8 @@ async function setupAuthIpc() {
     ipcMain.handle("auth:isAuthenticated", async () => {
         const auth = await isAuthenticated();
         api.setAuthToken(auth.accessToken);
+        await syncUserIdFromProfile();
+        sendDesktopSdkDiagnosticsIfNeeded();
         return auth;
     });
 
@@ -1101,12 +1217,14 @@ async function setupAuthIpc() {
         });
 
         const stored = await getStoredAccessToken({ allowRefresh: true });
+        await syncUserIdFromProfile();
         return { accessToken, tokens: stored, ok: !!accessToken };
     });
 
     ipcMain.handle("auth:logout", async () => {
         await logout();
         api.setAuthToken(null);
+        await syncUserIdFromProfile();
         return { ok: true };
     });
 }
@@ -1159,6 +1277,8 @@ async function bootstrap() {
     const auth = await isAuthenticated();
     logger.info("[auth] authenticated:", auth.authenticated);
     api.setAuthToken(auth.accessToken);
+    await syncUserIdFromProfile();
+    sendDesktopSdkDiagnosticsIfNeeded();
 
     const shouldAutoLogin = true;
     if (!auth.authenticated && shouldAutoLogin) {
