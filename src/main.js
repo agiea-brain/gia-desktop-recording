@@ -85,12 +85,49 @@ let currentMeetingInfo = null; // { windowId, meetingUrl, uploadToken, recording
 let userWantsToRecord = false; // Set to true when user confirms they want to record
 let recordingStarted = false; // Ensures recording only starts once per meeting
 
+// Prevent the "Record this meeting?" popup from re-appearing immediately after
+// the user clicks "Stop recording" (the SDK can re-emit meeting-detected while
+// the meeting is still active).
+const POPUP_SUPPRESS_AFTER_STOP_MS = 5_000;
+let suppressMeetingPopupUntil = 0;
+
+function suppressMeetingPopupFor(ms, reason) {
+    const duration = Math.max(0, Number(ms) || 0);
+    const until = Date.now() + duration;
+    if (until > suppressMeetingPopupUntil) suppressMeetingPopupUntil = until;
+    logger.info(
+        `[popup] suppress meeting popup for ${duration}ms (reason=${reason})`,
+    );
+}
+
 let userProfileFetchInFlight = null;
 let userProfileToken = null;
 let cachedUserId = null;
 
 let desktopDiagnosticsInFlight = null;
 let desktopDiagnosticsToken = null;
+let desktopDiagnosticsLastPermissionsSig = null;
+let desktopDiagnosticsLastSentAt = 0;
+
+// Latest permission statuses observed from the Recall SDK.
+let recallPermissionStatuses = {};
+let recallPermissionStatusesUpdatedAt = null;
+
+function stableStringify(value) {
+    // Deterministic JSON stringify (sort object keys).
+    // Avoids spurious "changed" detection due to key order.
+    const seen = new WeakSet();
+    const helper = (v) => {
+        if (v === null || typeof v !== "object") return v;
+        if (seen.has(v)) return "[Circular]";
+        seen.add(v);
+        if (Array.isArray(v)) return v.map(helper);
+        const out = {};
+        for (const k of Object.keys(v).sort()) out[k] = helper(v[k]);
+        return out;
+    };
+    return JSON.stringify(helper(value));
+}
 
 function buildPlatformString() {
     // Keep it stable + human-readable.
@@ -111,12 +148,41 @@ function buildAppVersionString() {
     }
 }
 
+function buildPermissionsDiagnostics() {
+    // Include both OS-level permission state and the latest Recall SDK status events.
+    const osPermissions = readPermissionStates();
+    return {
+        os: osPermissions,
+        recall: {
+            statuses: recallPermissionStatuses,
+            updatedAt: recallPermissionStatusesUpdatedAt,
+        },
+    };
+}
+
 async function sendDesktopSdkDiagnosticsIfNeeded() {
     const token = api?.authToken || null;
     if (!token) return;
 
-    // Only send once per token value.
-    if (desktopDiagnosticsToken === token) return;
+    const permissions = buildPermissionsDiagnostics();
+    const permissionsSig = stableStringify(permissions);
+
+    // Only send once per token+permissions snapshot (re-send when permissions change).
+    if (
+        desktopDiagnosticsToken === token &&
+        desktopDiagnosticsLastPermissionsSig === permissionsSig
+    ) {
+        return;
+    }
+
+    // Throttle if permissions are changing rapidly.
+    const now = Date.now();
+    if (
+        desktopDiagnosticsToken === token &&
+        now - desktopDiagnosticsLastSentAt < 5_000
+    ) {
+        return;
+    }
     if (desktopDiagnosticsInFlight) return await desktopDiagnosticsInFlight;
 
     desktopDiagnosticsInFlight = (async () => {
@@ -125,8 +191,11 @@ async function sendDesktopSdkDiagnosticsIfNeeded() {
                 timestamp: new Date(),
                 platform: buildPlatformString(),
                 version: buildAppVersionString(),
+                permissions,
             });
             desktopDiagnosticsToken = token;
+            desktopDiagnosticsLastPermissionsSig = permissionsSig;
+            desktopDiagnosticsLastSentAt = Date.now();
             logger.info("[auth] desktop sdk diagnostics updated");
         } catch (e) {
             // Best-effort only: never block auth on diagnostics.
@@ -225,11 +294,82 @@ function readPermissionStates() {
     };
 }
 
-function setupPermissionLogging() {
+let accessibilityTrustedAtStartup = null; // true/false/null (unknown)
+let accessibilityRelaunchInFlight = false;
+
+function captureAccessibilityTrustedAtStartupOnce() {
+    if (accessibilityTrustedAtStartup !== null)
+        return accessibilityTrustedAtStartup;
+    const current = readPermissionStates().accessibility;
+    // Only lock in explicit true/false. If unknown, keep null.
+    if (current === true) accessibilityTrustedAtStartup = true;
+    if (current === false) accessibilityTrustedAtStartup = false;
+    return accessibilityTrustedAtStartup;
+}
+
+async function relaunchApp({ reason = "unknown" } = {}) {
+    if (accessibilityRelaunchInFlight) return;
+    accessibilityRelaunchInFlight = true;
+
+    logger.info("[app] relaunch requested", { reason });
+
+    // Best-effort: inform the user before restarting.
+    try {
+        await dialog.showMessageBox({
+            type: "info",
+            title: "Restarting Gia",
+            message:
+                "Accessibility permission enabled. Gia will restart to finish setup.",
+            buttons: ["Restart now"],
+            defaultId: 0,
+            noLink: true,
+        });
+    } catch {
+        // ignore (e.g. app shutting down)
+    }
+
+    // Give logs a beat to flush before exiting.
+    setTimeout(() => {
+        try {
+            app.relaunch();
+        } catch (e) {
+            logger.error("[app] failed to relaunch", e);
+        }
+        try {
+            app.exit(0);
+        } catch {
+            try {
+                app.quit();
+            } catch {
+                // ignore
+            }
+        }
+    }, 250).unref?.();
+}
+
+async function maybeRelaunchAfterAccessibilityGranted({
+    prev,
+    next,
+    reason = "unknown",
+} = {}) {
+    if (process.platform !== "darwin") return;
+
+    // Only relaunch on an actual transition from not granted -> granted.
+    if (prev?.accessibility === false && next?.accessibility === true) {
+        // Guard against relaunching on startup when it's already granted.
+        captureAccessibilityTrustedAtStartupOnce();
+        if (accessibilityTrustedAtStartup === false) {
+            await relaunchApp({ reason: `accessibility-granted:${reason}` });
+        }
+    }
+}
+
+function setupPermissionLogging({ onChange } = {}) {
     let last = null;
 
     const log = (reason = "unknown") => {
         const next = readPermissionStates();
+        const prev = last;
 
         // Only log when something changed, unless it's the first run.
         const changed =
@@ -243,6 +383,11 @@ function setupPermissionLogging() {
                 reason,
                 permissions: next,
             });
+            try {
+                onChange?.({ prev, next, reason });
+            } catch (e) {
+                logger.warn("[permissions] onChange handler failed", e);
+            }
             last = next;
         }
     };
@@ -403,7 +548,7 @@ async function startMeetingRecordingWithAuth({ source = "unknown" } = {}) {
         await getUploadTokenAndStoreInfo();
         logger.info(`[recall] uploadToken: ${currentMeetingInfo.uploadToken}`);
         await registerCurrentMeetingUrlIfNeeded();
-        logger.info(`[recall] registered meeting URL`);
+        logger.info(`[recall] meeting URL registration check complete`);
         await startMeetingRecording();
     } catch (error) {
         logger.error(
@@ -469,6 +614,10 @@ function buildTrayMenu() {
             enabled: isRecording,
             click: async () => {
                 try {
+                    suppressMeetingPopupFor(
+                        POPUP_SUPPRESS_AFTER_STOP_MS,
+                        "tray-stop",
+                    );
                     await stopMeetingRecording();
                 } catch (e) {
                     logger.error("[tray] failed to stop recording:", e);
@@ -963,9 +1112,6 @@ async function registerCurrentMeetingUrlIfNeeded() {
         return;
     }
 
-    currentMeetingInfo.lastRegisterAttemptUrl = meetingUrl;
-    currentMeetingInfo.lastRegisterAttemptAt = now;
-
     try {
         logger.info("[recall] registering meeting URL...");
         const accessToken = await ensureAccessToken({ interactive: false });
@@ -978,6 +1124,21 @@ async function registerCurrentMeetingUrlIfNeeded() {
 
         const recordingId = currentMeetingInfo.recordingId ?? null;
         const sdkUploadId = currentMeetingInfo.sdkUploadId ?? null;
+
+        if (!recordingId || !sdkUploadId) {
+            logger.info(
+                "[recall] cannot register meeting URL (no recording ID or SDK upload ID)",
+            );
+            return;
+        }
+
+        // Only throttle/dedupe after we have the required identifiers and are
+        // actually going to make the API call. This prevents race conditions
+        // (e.g. meeting-updated firing before upload token info is stored)
+        // from permanently blocking later registration.
+        currentMeetingInfo.lastRegisterAttemptUrl = meetingUrl;
+        currentMeetingInfo.lastRegisterAttemptAt = now;
+
         await api.registerMeetingUrl({
             meetingUrl,
             recordingId,
@@ -1121,6 +1282,10 @@ async function setupMeetingPopupIpc() {
             return;
         }
 
+        suppressMeetingPopupFor(
+            POPUP_SUPPRESS_AFTER_STOP_MS,
+            "popup-end-recording",
+        );
         try {
             await stopMeetingRecording();
             // Clear meeting info after stopping
@@ -1165,6 +1330,10 @@ async function setupDebugControlsIpc() {
     ipcMain.handle("debug-controls:stop", async () => {
         if (!isRecording) return { ok: false, reason: "not_recording" };
 
+        suppressMeetingPopupFor(
+            POPUP_SUPPRESS_AFTER_STOP_MS,
+            "debug-controls-stop",
+        );
         try {
             await stopMeetingRecording();
             return { ok: true };
@@ -1270,42 +1439,41 @@ async function bootstrap() {
     app.setName("Gia");
     createTray();
 
-    await setupAuthIpc();
-    await setupDebugControlsIpc();
-
-    // Lightweight startup check (doesn't force an interactive login).
-    const auth = await isAuthenticated();
-    logger.info("[auth] authenticated:", auth.authenticated);
-    api.setAuthToken(auth.accessToken);
-    await syncUserIdFromProfile();
-    sendDesktopSdkDiagnosticsIfNeeded();
-
-    const shouldAutoLogin = true;
-    if (!auth.authenticated && shouldAutoLogin) {
-        try {
-            logger.info("[auth] starting interactive login...");
-            await ensureAccessToken({ interactive: true });
-            logger.info("[auth] login complete");
-        } catch (e) {
-            logger.warn("[auth] login failed (continuing without auth):", e);
-        }
-    }
-
+    // Initialize SDK and register event listeners EARLY, before any blocking auth operations.
+    // This ensures meeting detection works immediately on app start.
     RecallAiSdk.init({
         api_url: "https://us-east-1.recall.ai",
     });
 
-    setupPermissionLogging();
+    // Capture initial Accessibility state once so we only relaunch on a real grant transition.
+    captureAccessibilityTrustedAtStartupOnce();
+
+    setupPermissionLogging({
+        onChange: ({ prev, next, reason }) => {
+            // Keep existing relaunch behavior and also update diagnostics.
+            maybeRelaunchAfterAccessibilityGranted({ prev, next, reason });
+            sendDesktopSdkDiagnosticsIfNeeded();
+        },
+    });
 
     RecallAiSdk.requestPermission("accessibility");
     RecallAiSdk.requestPermission("microphone");
     RecallAiSdk.requestPermission("screen-capture");
+
+    logger.info(`[recall] Registering event listeners`);
 
     RecallAiSdk.addEventListener("meeting-detected", async (evt) => {
         const windowId = evt.window.id;
         const meetingPlatform = evt.window?.platform;
         logger.info("[recall] meeting-detected event:", evt.window);
         logger.info("[recall] window id:", windowId);
+
+        if (Date.now() < suppressMeetingPopupUntil) {
+            logger.info(
+                "[recall] meeting-detected ignored (popup suppressed after stop)",
+            );
+            return;
+        }
 
         if (meetingPlatform === "slack") {
             logger.info(
@@ -1351,6 +1519,40 @@ async function bootstrap() {
             logger.error("[recall] meeting detection failed:", e);
             currentMeetingInfo = null;
             refreshTrayMenu();
+        }
+    });
+
+    RecallAiSdk.addEventListener("permission-status", (evt) => {
+        const { permission, status } = evt;
+        logger.info(
+            `[recall] permission-status event: ${permission}, ${status}`,
+        );
+
+        // Track latest permission statuses for diagnostics.
+        try {
+            if (typeof permission === "string") {
+                recallPermissionStatuses = {
+                    ...(recallPermissionStatuses || {}),
+                    [permission]: status,
+                };
+                recallPermissionStatusesUpdatedAt = new Date().toISOString();
+                sendDesktopSdkDiagnosticsIfNeeded();
+            }
+        } catch (e) {
+            logger.warn("[recall] failed to store permission-status", e);
+        }
+
+        // Prefer the SDK event: once Accessibility becomes granted, relaunch to ensure
+        // downstream frameworks pick up the new TCC permission.
+        if (
+            process.platform === "darwin" &&
+            permission === "accessibility" &&
+            status === "granted"
+        ) {
+            captureAccessibilityTrustedAtStartupOnce();
+            if (accessibilityTrustedAtStartup === false) {
+                relaunchApp({ reason: "recall-permission-status" });
+            }
         }
     });
 
@@ -1452,8 +1654,29 @@ async function bootstrap() {
         refreshTrayMenu();
     });
 
-    // Setup IPC handlers for meeting popup
+    // Setup IPC handlers for meeting popup and other features
     await setupMeetingPopupIpc();
+    await setupAuthIpc();
+    await setupDebugControlsIpc();
+
+    // Auth operations run AFTER SDK event listeners are registered.
+    // This ensures meeting detection works even if auth is slow or requires user interaction.
+    const auth = await isAuthenticated();
+    logger.info("[auth] authenticated:", auth.authenticated);
+    api.setAuthToken(auth.accessToken);
+    await syncUserIdFromProfile();
+    sendDesktopSdkDiagnosticsIfNeeded();
+
+    const shouldAutoLogin = true;
+    if (!auth.authenticated && shouldAutoLogin) {
+        try {
+            logger.info("[auth] starting interactive login...");
+            await ensureAccessToken({ interactive: true });
+            logger.info("[auth] login complete");
+        } catch (e) {
+            logger.warn("[auth] login failed (continuing without auth):", e);
+        }
+    }
 }
 
 bootstrap().catch((err) => {

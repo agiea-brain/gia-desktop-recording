@@ -1,4 +1,5 @@
 import { loadEnv } from "./load-env";
+import logger from "./logger";
 
 // Ensure env is loaded even when cwd isn't repo root.
 loadEnv();
@@ -51,6 +52,12 @@ class Api {
     }
 
     async registerMeetingUrl({ meetingUrl, recordingId, sdkUploadId }) {
+        if (!meetingUrl || !recordingId || !sdkUploadId) {
+            logger.info(
+                `[recall] registerMeetingUrl: Missing meeting URL, recording ID, or SDK upload ID: ${meetingUrl}, ${recordingId}, ${sdkUploadId}`,
+            );
+            return;
+        }
         if (!this.authToken) {
             throw new Error("Missing auth token (call setAuthToken first)");
         }
@@ -107,7 +114,12 @@ class Api {
         return data;
     }
 
-    async updateDesktopSdkDiagnostics({ timestamp, platform, version }) {
+    async updateDesktopSdkDiagnostics({
+        timestamp,
+        platform,
+        version,
+        permissions,
+    }) {
         if (!this.authToken) {
             throw new Error("Missing auth token (call setAuthToken first)");
         }
@@ -121,7 +133,12 @@ class Api {
                     Accept: "application/json",
                     Authorization: `Bearer ${this.authToken}`,
                 },
-                body: JSON.stringify({ timestamp, platform, version }),
+                body: JSON.stringify({
+                    timestamp,
+                    platform,
+                    version,
+                    permissions,
+                }),
             },
         );
 
