@@ -5,6 +5,25 @@
         <meta name="application-name" content="Gia" />
         <title>Record Meeting?</title>
         <style>
+            :root {
+                --background: hsl(0, 0%, 100%);
+                --foreground: hsl(0, 0%, 3.9%);
+                --card: hsl(0, 0%, 100%);
+                --card-foreground: hsl(0, 0%, 3.9%);
+                --primary: hsl(0, 0%, 9%);
+                --primary-foreground: hsl(0, 0%, 98%);
+                --secondary: hsl(0, 0%, 96.1%);
+                --secondary-foreground: hsl(0, 0%, 9%);
+                --muted: hsl(0, 0%, 96.1%);
+                --muted-foreground: hsl(0, 0%, 45.1%);
+                --destructive: hsl(0, 84.2%, 60.2%);
+                --destructive-foreground: hsl(0, 0%, 98%);
+                --border: hsl(0, 0%, 89.8%);
+                --input: hsl(0, 0%, 89.8%);
+                --ring: hsl(0, 0%, 3.9%);
+                --radius: 0.5rem;
+            }
+
             * {
                 margin: 0;
                 padding: 0;
@@ -13,14 +32,17 @@
             
             body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-                background: #fff;
+                background: var(--background);
+                color: var(--foreground);
                 overflow: hidden;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
             }
             
             .titlebar {
-                height: 32px;
-                background: #fafafa;
-                border-bottom: 1px solid #e5e5e5;
+                height: 36px;
+                background: var(--background);
+                border-bottom: 1px solid var(--border);
                 display: flex;
                 align-items: center;
                 padding: 0 12px;
@@ -66,43 +88,43 @@
             .header-row {
                 display: flex;
                 align-items: center;
-                gap: 10px;
+                gap: 12px;
                 margin-bottom: 8px;
             }
 
             .gia-logo {
-                width: 22px;
-                height: 22px;
-                border-radius: 6px;
+                width: 28px;
+                height: 28px;
+                border-radius: var(--radius);
                 object-fit: contain;
                 flex: 0 0 auto;
             }
             
             h1 {
-                font-size: 16px;
+                font-size: 18px;
                 font-weight: 600;
-                color: #000;
-                margin-bottom: 0;
+                color: var(--foreground);
+                letter-spacing: -0.025em;
             }
             
             p {
-                font-size: 13px;
-                color: #666;
-                margin-bottom: 20px;
-                line-height: 1.4;
+                font-size: 14px;
+                color: var(--muted-foreground);
+                margin-bottom: 24px;
+                line-height: 1.5;
             }
             
             .recording-status {
                 display: none;
                 align-items: center;
-                gap: 8px;
-                margin-bottom: 16px;
-                padding: 10px 12px;
-                background: #fef2f2;
-                border: 1px solid #fecaca;
-                border-radius: 6px;
-                color: #dc2626;
-                font-size: 13px;
+                gap: 10px;
+                margin-bottom: 20px;
+                padding: 12px 14px;
+                background: hsl(0, 84.2%, 97%);
+                border: 1px solid hsl(0, 84.2%, 90%);
+                border-radius: var(--radius);
+                color: var(--destructive);
+                font-size: 14px;
                 font-weight: 500;
             }
             
@@ -114,7 +136,7 @@
                 width: 8px;
                 height: 8px;
                 border-radius: 50%;
-                background: #dc2626;
+                background: var(--destructive);
                 animation: pulse 1.5s ease-in-out infinite;
             }
             
@@ -125,55 +147,87 @@
             
             .button-group {
                 display: flex;
-                gap: 8px;
+                gap: 10px;
             }
             
             button {
-                padding: 8px 16px;
-                border-radius: 6px;
-                font-size: 13px;
+                padding: 10px 20px;
+                border-radius: var(--radius);
+                font-size: 14px;
                 font-weight: 500;
                 cursor: pointer;
-                transition: background 0.15s, border-color 0.15s;
+                transition: all 0.15s ease;
                 flex: 1;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
             }
             
             .btn-primary {
-                background: #22c55e;
-                color: #fff;
-                border: 1px solid #22c55e;
+                background: var(--primary);
+                color: var(--primary-foreground);
+                border: 1px solid var(--primary);
             }
             
             .btn-primary:hover:not(:disabled) {
-                background: #16a34a;
-                border-color: #16a34a;
+                background: hsl(0, 0%, 15%);
+                border-color: hsl(0, 0%, 15%);
+            }
+            
+            .btn-primary:focus-visible {
+                outline: 2px solid var(--ring);
+                outline-offset: 2px;
             }
             
             .btn-secondary {
-                background: #fff;
-                color: #333;
-                border: 1px solid #d1d5db;
+                background: var(--background);
+                color: var(--foreground);
+                border: 1px solid var(--border);
             }
             
             .btn-secondary:hover:not(:disabled) {
-                background: #f9fafb;
-                border-color: #9ca3af;
+                background: var(--secondary);
+                border-color: var(--input);
             }
             
-            .btn-danger {
-                background: #dc2626;
-                color: #fff;
-                border: 1px solid #dc2626;
+            .btn-secondary:focus-visible {
+                outline: 2px solid var(--ring);
+                outline-offset: 2px;
             }
             
-            .btn-danger:hover:not(:disabled) {
-                background: #b91c1c;
-                border-color: #b91c1c;
+            .btn-destructive {
+                background: var(--destructive);
+                color: var(--destructive-foreground);
+                border: 1px solid var(--destructive);
+            }
+            
+            .btn-destructive:hover:not(:disabled) {
+                background: hsl(0, 84.2%, 50%);
+                border-color: hsl(0, 84.2%, 50%);
+            }
+            
+            .btn-destructive:focus-visible {
+                outline: 2px solid var(--ring);
+                outline-offset: 2px;
             }
             
             button:disabled {
                 opacity: 0.5;
                 cursor: not-allowed;
+            }
+
+            .spinner {
+                width: 16px;
+                height: 16px;
+                border: 2px solid currentColor;
+                border-top-color: transparent;
+                border-radius: 50%;
+                animation: spin 0.6s linear infinite;
+                margin-right: 8px;
+            }
+
+            @keyframes spin {
+                to { transform: rotate(360deg); }
             }
         </style>
     </head>
@@ -189,20 +243,20 @@
                 <img class="gia-logo" id="giaLogo" alt="Gia" />
                 <h1 id="title">Record this meeting?</h1>
             </div>
-            <p id="message">A meeting has been detected.</p>
+            <p id="message">A meeting has been detected. Would you like Gia to record it?</p>
             
             <div class="recording-status" id="recordingStatus">
                 <div class="recording-indicator"></div>
-                <span>Recording</span>
+                <span>Recording in progress</span>
             </div>
             
             <div class="button-group" id="initialButtons">
-                <button class="btn-secondary" id="declineBtn">No</button>
-                <button class="btn-primary" id="confirmBtn">Yes</button>
+                <button class="btn-secondary" id="declineBtn">No thanks</button>
+                <button class="btn-primary" id="confirmBtn">Start recording</button>
             </div>
             
             <div class="button-group" id="recordingButtons" style="display: none;">
-                <button class="btn-danger" id="endBtn">End Recording</button>
+                <button class="btn-destructive" id="endBtn">End Recording</button>
             </div>
         </div>
         
@@ -272,7 +326,7 @@
                 
                 confirmBtn.disabled = true;
                 declineBtn.disabled = true;
-                confirmBtn.textContent = 'Starting...';
+                confirmBtn.innerHTML = '<div class="spinner"></div>Starting...';
                 
                 try {
                     await ipcRenderer.invoke('meeting-popup:confirm-recording');
@@ -280,7 +334,7 @@
                     console.error('Error starting recording:', error);
                     confirmBtn.disabled = false;
                     declineBtn.disabled = false;
-                    confirmBtn.textContent = 'Yes';
+                    confirmBtn.textContent = 'Start recording';
                 }
             });
             
@@ -295,7 +349,7 @@
                 if (!isRecording) return;
                 
                 endBtn.disabled = true;
-                endBtn.textContent = 'Stopping...';
+                endBtn.innerHTML = '<div class="spinner"></div>Stopping...';
                 
                 try {
                     await ipcRenderer.invoke('meeting-popup:end-recording');

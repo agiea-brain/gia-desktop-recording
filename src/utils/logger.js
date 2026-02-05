@@ -166,9 +166,10 @@ function emit(level, args, context) {
                 (typeof console?.[level] === "function" && console[level]) ||
                 (typeof console?.log === "function" && console.log);
             if (fn) {
+                const ts = `[${new Date().toISOString()}]`;
                 if (Object.keys(mergedContext).length)
-                    fn(...args, mergedContext);
-                else fn(...args);
+                    fn(ts, ...args, mergedContext);
+                else fn(ts, ...args);
             }
         } catch {
             // ignore console logging failures

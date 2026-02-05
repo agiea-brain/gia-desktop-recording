@@ -17,6 +17,7 @@ module.exports = {
         extraResource: [
             "./src/assets/gia-tray.png",
             "./src/meeting-popup.html",
+            "./src/onboarding-popup.html",
             "./src/debug-controls.html",
             "./src/debug-controls-renderer.js",
         ],

@@ -1,0 +1,683 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="application-name" content="Gia" />
+        <title>Welcome to Gia</title>
+        <style>
+            :root {
+                --background: hsl(0, 0%, 100%);
+                --foreground: hsl(0, 0%, 3.9%);
+                --card: hsl(0, 0%, 100%);
+                --card-foreground: hsl(0, 0%, 3.9%);
+                --primary: hsl(0, 0%, 9%);
+                --primary-foreground: hsl(0, 0%, 98%);
+                --secondary: hsl(0, 0%, 96.1%);
+                --secondary-foreground: hsl(0, 0%, 9%);
+                --muted: hsl(0, 0%, 96.1%);
+                --muted-foreground: hsl(0, 0%, 45.1%);
+                --accent: hsl(0, 0%, 96.1%);
+                --accent-foreground: hsl(0, 0%, 9%);
+                --destructive: hsl(0, 84.2%, 60.2%);
+                --destructive-foreground: hsl(0, 0%, 98%);
+                --border: hsl(0, 0%, 89.8%);
+                --input: hsl(0, 0%, 89.8%);
+                --ring: hsl(0, 0%, 3.9%);
+                --radius: 0.5rem;
+                --success: hsl(142, 76%, 36%);
+                --success-light: hsl(142, 76%, 94%);
+            }
+
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                background: var(--background);
+                color: var(--foreground);
+                overflow: hidden;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+            }
+            
+            .titlebar {
+                height: 36px;
+                background: var(--background);
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                align-items: center;
+                padding: 0 12px;
+                -webkit-app-region: drag;
+            }
+            
+            .window-controls {
+                display: flex;
+                gap: 8px;
+                -webkit-app-region: no-drag;
+            }
+            
+            .window-btn {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                border: none;
+                cursor: pointer;
+                transition: opacity 0.15s;
+            }
+            
+            .window-btn:hover {
+                opacity: 0.8;
+            }
+            
+            .btn-close {
+                background: #ff5f57;
+            }
+            
+            .btn-minimize {
+                background: #febc2e;
+            }
+            
+            .container {
+                padding: 32px;
+                -webkit-app-region: no-drag;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+
+            .gia-logo {
+                width: 64px;
+                height: 64px;
+                border-radius: 16px;
+                object-fit: contain;
+                margin-bottom: 24px;
+            }
+            
+            h1 {
+                font-size: 24px;
+                font-weight: 600;
+                color: var(--foreground);
+                letter-spacing: -0.025em;
+                margin-bottom: 8px;
+            }
+            
+            p {
+                font-size: 14px;
+                color: var(--muted-foreground);
+                line-height: 1.6;
+                max-width: 320px;
+            }
+
+            .subtitle {
+                margin-bottom: 32px;
+            }
+            
+            /* Buttons */
+            .btn {
+                padding: 12px 24px;
+                border-radius: var(--radius);
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.15s ease;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                min-width: 200px;
+            }
+            
+            .btn-primary {
+                background: var(--primary);
+                color: var(--primary-foreground);
+                border: 1px solid var(--primary);
+            }
+            
+            .btn-primary:hover:not(:disabled) {
+                background: hsl(0, 0%, 15%);
+                border-color: hsl(0, 0%, 15%);
+            }
+            
+            .btn-secondary {
+                background: var(--background);
+                color: var(--foreground);
+                border: 1px solid var(--border);
+            }
+            
+            .btn-secondary:hover:not(:disabled) {
+                background: var(--secondary);
+            }
+
+            .btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .btn:focus-visible {
+                outline: 2px solid var(--ring);
+                outline-offset: 2px;
+            }
+
+            /* Spinner */
+            .spinner {
+                width: 16px;
+                height: 16px;
+                border: 2px solid currentColor;
+                border-top-color: transparent;
+                border-radius: 50%;
+                animation: spin 0.6s linear infinite;
+            }
+
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+
+            /* Stepper */
+            .stepper {
+                width: 100%;
+                margin-bottom: 32px;
+            }
+
+            .step {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                padding: 16px;
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                margin-bottom: 12px;
+                text-align: left;
+                transition: all 0.2s ease;
+            }
+
+            .step.active {
+                border-color: var(--primary);
+                background: var(--secondary);
+            }
+
+            .step.completed {
+                border-color: var(--success);
+                background: var(--success-light);
+            }
+
+            .step.pending {
+                opacity: 0.5;
+            }
+
+            .step-number {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                background: var(--muted);
+                color: var(--muted-foreground);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 600;
+                font-size: 14px;
+                flex-shrink: 0;
+            }
+
+            .step.active .step-number {
+                background: var(--primary);
+                color: var(--primary-foreground);
+            }
+
+            .step.completed .step-number {
+                background: var(--success);
+                color: white;
+            }
+
+            .step-content {
+                flex: 1;
+            }
+
+            .step-title {
+                font-weight: 600;
+                font-size: 14px;
+                color: var(--foreground);
+                margin-bottom: 2px;
+            }
+
+            .step-description {
+                font-size: 13px;
+                color: var(--muted-foreground);
+            }
+
+            .step-status {
+                font-size: 12px;
+                color: var(--success);
+                font-weight: 500;
+            }
+
+            .checkmark {
+                width: 16px;
+                height: 16px;
+            }
+
+            /* Views */
+            .view {
+                display: none;
+            }
+
+            .view.active {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+
+            /* Ready view icon */
+            .success-icon {
+                width: 64px;
+                height: 64px;
+                border-radius: 50%;
+                background: var(--success-light);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-bottom: 24px;
+            }
+
+            .success-icon svg {
+                width: 32px;
+                height: 32px;
+                color: var(--success);
+            }
+
+            /* Feature list */
+            .features {
+                text-align: left;
+                margin: 24px 0;
+                padding: 0;
+                list-style: none;
+            }
+
+            .features li {
+                display: flex;
+                align-items: flex-start;
+                gap: 12px;
+                margin-bottom: 12px;
+                font-size: 14px;
+                color: var(--foreground);
+            }
+
+            .features li svg {
+                width: 20px;
+                height: 20px;
+                color: var(--success);
+                flex-shrink: 0;
+                margin-top: 1px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="titlebar">
+            <div class="window-controls">
+                <button class="window-btn btn-close" id="closeBtn" title="Close"></button>
+                <button class="window-btn btn-minimize" id="minimizeBtn" title="Minimize"></button>
+            </div>
+        </div>
+        
+        <div class="container">
+            <!-- Login View -->
+            <div class="view active" id="loginView">
+                <img class="gia-logo" id="giaLogo" alt="Gia" />
+                <h1>Welcome to Gia</h1>
+                <p class="subtitle">Your AI meeting assistant. Sign in to get started with automatic meeting recording and transcription.</p>
+                <button class="btn btn-primary" id="loginBtn">
+                    Sign in with Gia
+                </button>
+            </div>
+
+            <!-- Permissions View -->
+            <div class="view" id="permissionsView">
+                <h1>Setup Permissions</h1>
+                <p class="subtitle">Gia needs a few permissions to record your meetings. We'll guide you through each one.</p>
+                
+                <div class="stepper">
+                    <div class="step" id="step-microphone" data-step="microphone">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <div class="step-title">Microphone Access</div>
+                            <div class="step-description">To capture audio from your meetings</div>
+                        </div>
+                        <div class="step-status"></div>
+                    </div>
+                    
+                    <div class="step pending" id="step-accessibility" data-step="accessibility">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <div class="step-title">Accessibility</div>
+                            <div class="step-description">To detect when meetings start</div>
+                        </div>
+                        <div class="step-status"></div>
+                    </div>
+                    
+                    <div class="step pending" id="step-screen" data-step="screen">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <div class="step-title">Screen Recording</div>
+                            <div class="step-description">To capture meeting content</div>
+                        </div>
+                        <div class="step-status"></div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="permissionBtn">
+                    Grant Microphone Access
+                </button>
+            </div>
+
+            <!-- Ready View -->
+            <div class="view" id="readyView">
+                <div class="success-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <h1>You're all set!</h1>
+                <p class="subtitle">Gia is now ready to help you with your meetings.</p>
+                
+                <ul class="features">
+                    <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span>When a meeting is detected, you'll see a popup asking if you want to record</span>
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span>Gia runs in your menu bar — click the icon to access settings</span>
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span>Your recordings are automatically transcribed and summarized</span>
+                    </li>
+                </ul>
+
+                <button class="btn btn-primary" id="getStartedBtn">
+                    Get Started
+                </button>
+            </div>
+        </div>
+        
+        <script>
+            const { ipcRenderer } = require('electron');
+
+            // Route logs through main-process
+            (() => {
+                const send = (level, ...args) =>
+                    ipcRenderer.send("app-log", {
+                        level,
+                        args,
+                        context: { source: "onboarding-popup" },
+                    });
+
+                const original = {
+                    log: console.log?.bind(console),
+                    info: console.info?.bind(console),
+                    warn: console.warn?.bind(console),
+                    error: console.error?.bind(console),
+                };
+
+                console.log = (...args) => { original.log?.(...args); send("info", ...args); };
+                console.info = (...args) => { original.info?.(...args); send("info", ...args); };
+                console.warn = (...args) => { original.warn?.(...args); send("warn", ...args); };
+                console.error = (...args) => { original.error?.(...args); send("error", ...args); };
+            })();
+
+            // Elements
+            const loginView = document.getElementById('loginView');
+            const permissionsView = document.getElementById('permissionsView');
+            const readyView = document.getElementById('readyView');
+            const giaLogoEl = document.getElementById('giaLogo');
+            const loginBtn = document.getElementById('loginBtn');
+            const permissionBtn = document.getElementById('permissionBtn');
+            const getStartedBtn = document.getElementById('getStartedBtn');
+            const closeBtn = document.getElementById('closeBtn');
+            const minimizeBtn = document.getElementById('minimizeBtn');
+
+            // Permission steps
+            const permissionSteps = ['microphone', 'accessibility', 'screen'];
+            let currentStepIndex = 0;
+
+            // Window controls
+            closeBtn.addEventListener('click', () => {
+                ipcRenderer.invoke('onboarding:close');
+            });
+
+            minimizeBtn.addEventListener('click', () => {
+                ipcRenderer.invoke('onboarding:minimize');
+            });
+
+            // Show specific view
+            function showView(viewId) {
+                document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+                document.getElementById(viewId).classList.add('active');
+            }
+
+            // Update step UI
+            function updateStepUI(stepName, status) {
+                const stepEl = document.getElementById(`step-${stepName}`);
+                if (!stepEl) return;
+
+                stepEl.classList.remove('active', 'completed', 'pending');
+                const statusEl = stepEl.querySelector('.step-status');
+                const numberEl = stepEl.querySelector('.step-number');
+
+                if (status === 'active') {
+                    stepEl.classList.add('active');
+                    statusEl.textContent = '';
+                } else if (status === 'completed') {
+                    stepEl.classList.add('completed');
+                    numberEl.innerHTML = '<svg class="checkmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                    statusEl.textContent = 'Granted';
+                } else if (status === 'pending') {
+                    stepEl.classList.add('pending');
+                    statusEl.textContent = '';
+                }
+            }
+
+            // Update button text based on current step
+            function updatePermissionButton() {
+                const step = permissionSteps[currentStepIndex];
+                const labels = {
+                    'microphone': 'Grant Microphone Access',
+                    'accessibility': 'Grant Accessibility Access',
+                    'screen': 'Grant Screen Recording Access'
+                };
+                permissionBtn.innerHTML = labels[step] || 'Continue';
+                permissionBtn.disabled = false;
+            }
+
+            // Initialize permissions view
+            function initPermissionsView() {
+                permissionSteps.forEach((step, index) => {
+                    if (index < currentStepIndex) {
+                        updateStepUI(step, 'completed');
+                    } else if (index === currentStepIndex) {
+                        updateStepUI(step, 'active');
+                    } else {
+                        updateStepUI(step, 'pending');
+                    }
+                });
+                updatePermissionButton();
+            }
+
+            // Window size constants
+            const VIEW_SIZES = {
+                login: { width: 440, height: 340 },
+                permissions: { width: 440, height: 520 },
+                ready: { width: 440, height: 480 }
+            };
+
+            // Login button
+            loginBtn.addEventListener('click', async () => {
+                loginBtn.disabled = true;
+                loginBtn.innerHTML = '<div class="spinner"></div>Signing in...';
+                
+                try {
+                    const result = await ipcRenderer.invoke('onboarding:login');
+                    if (result.success) {
+                        console.log('Login successful, moving to permissions');
+                        // Resize window for permissions view
+                        await ipcRenderer.invoke('onboarding:resize', VIEW_SIZES.permissions);
+                        showView('permissionsView');
+                        initPermissionsView();
+                    } else {
+                        console.error('Login failed:', result.error);
+                        loginBtn.disabled = false;
+                        loginBtn.textContent = 'Sign in with Gia';
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Sign in with Gia';
+                }
+            });
+
+            // Track if we're waiting for a permission grant
+            // (we do not poll; we rely on Recall SDK permission-status events)
+            let waitingForPermission = null;
+
+            function stopPolling() {
+                // legacy no-op (kept to avoid refactors elsewhere)
+            }
+
+            function startWaitingForPermission(permission) {
+                stopPolling();
+                waitingForPermission = permission;
+
+                console.log(`Waiting for SDK permission-status event for ${permission}...`);
+                permissionBtn.textContent = 'Waiting for permission...';
+                permissionBtn.disabled = true;
+            }
+
+            // Centralized handler for when a permission is granted
+            function handlePermissionGranted(permission) {
+                const stepIndex = permissionSteps.indexOf(permission);
+                // Only process if this is the current step (prevent duplicate handling)
+                if (stepIndex !== currentStepIndex) {
+                    console.log(`Permission ${permission} granted but not current step, ignoring`);
+                    return;
+                }
+                
+                console.log(`Permission ${permission} granted, moving to next step`);
+                updateStepUI(permission, 'completed');
+                currentStepIndex++;
+                
+                if (currentStepIndex >= permissionSteps.length) {
+                    // All permissions granted - show finish button
+                    console.log('All permissions granted!');
+                    permissionBtn.textContent = 'Finish Setup';
+                    permissionBtn.disabled = false;
+                } else {
+                    // Move to next step
+                    updateStepUI(permissionSteps[currentStepIndex], 'active');
+                    updatePermissionButton();
+                }
+            }
+
+            // Permission button
+            permissionBtn.addEventListener('click', async () => {
+                const step = permissionSteps[currentStepIndex];
+                
+                // If all permissions done, this is the "Finish Setup" click
+                if (currentStepIndex >= permissionSteps.length) {
+                    console.log('Finishing setup...');
+                    permissionBtn.disabled = true;
+                    permissionBtn.innerHTML = '<div class="spinner"></div>Finishing...';
+                    await ipcRenderer.invoke('onboarding:complete');
+                    return;
+                }
+                
+                // If we're already waiting for this permission, don't request again
+                if (waitingForPermission === step) {
+                    console.log(`Already waiting for ${step} permission, ignoring click`);
+                    return;
+                }
+                
+                permissionBtn.disabled = true;
+                permissionBtn.innerHTML = '<div class="spinner"></div>Requesting...';
+
+                try {
+                    const result = await ipcRenderer.invoke('onboarding:request-permission', step);
+                    console.log(`Permission ${step} result:`, result);
+
+                    if (result.granted) {
+                        handlePermissionGranted(step);
+                    } else {
+                        // Permission not granted yet - wait for SDK event or poll
+                        console.log(`${step} not granted yet, waiting...`);
+                        startWaitingForPermission(step);
+                    }
+                } catch (error) {
+                    console.error('Permission error:', error);
+                    waitingForPermission = null;
+                    updatePermissionButton();
+                }
+            });
+
+            // Get Started button
+            getStartedBtn.addEventListener('click', async () => {
+                await ipcRenderer.invoke('onboarding:get-started');
+            });
+
+            // Receive the Gia logo from main
+            ipcRenderer.on('onboarding:logo', (_event, payload) => {
+                const dataUrl = payload?.dataUrl;
+                if (typeof dataUrl === 'string' && dataUrl.length > 0) {
+                    giaLogoEl.src = dataUrl;
+                    giaLogoEl.style.display = 'block';
+                } else {
+                    giaLogoEl.style.display = 'none';
+                }
+            });
+
+            // Handle initial state from main process
+            ipcRenderer.on('onboarding:init', async (_event, payload) => {
+                console.log('Onboarding init:', payload);
+                
+                if (payload.view === 'ready') {
+                    showView('readyView');
+                } else if (payload.view === 'permissions') {
+                    showView('permissionsView');
+                    // Set current step based on permissions status
+                    if (payload.permissions) {
+                        currentStepIndex = 0;
+                        if (payload.permissions.microphone) currentStepIndex = 1;
+                        if (payload.permissions.accessibility) currentStepIndex = 2;
+                        if (payload.permissions.screen) currentStepIndex = 3;
+                    }
+                    initPermissionsView();
+                } else {
+                    showView('loginView');
+                }
+            });
+
+            // Listen for permission status updates (in case granted via System Preferences)
+            ipcRenderer.on('onboarding:permission-status', (_event, payload) => {
+                console.log('Permission status update:', payload);
+                const { permission, granted } = payload;
+                
+                if (granted) {
+                    // Stop polling if we were waiting for this permission
+                    if (waitingForPermission === permission) {
+                        stopPolling();
+                        waitingForPermission = null;
+                    }
+                    // Use centralized handler to prevent duplicate processing
+                    handlePermissionGranted(permission);
+                }
+            });
+        </script>
+    </body>
+</html>
