@@ -42,8 +42,6 @@ logger.info(
 );
 
 function setupAutoUpdates() {
-    // Option A: GitHub Releases + update.electronjs.org.
-    // Only run in packaged mac builds (autoUpdater will not work in dev).
     if (!app.isPackaged) return;
     if (process.platform !== "darwin") return;
 
@@ -59,7 +57,7 @@ function setupAutoUpdates() {
                 },
             });
             const currentVersion = app.getVersion();
-            logger.info("[auto-update] current version", currentVersion);
+            logger.info("[auto-update] current version:", currentVersion);
             logger.info("[auto-update] update-electron-app initialized");
         })
         .catch((err) => {
