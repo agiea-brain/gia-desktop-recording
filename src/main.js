@@ -58,6 +58,8 @@ function setupAutoUpdates() {
                     log: (...args) => logger.info("[auto-update]", ...args),
                 },
             });
+            const currentVersion = app.getVersion();
+            logger.info("[auto-update] current version", currentVersion);
             logger.info("[auto-update] update-electron-app initialized");
         })
         .catch((err) => {
@@ -1675,7 +1677,7 @@ async function setupOnboardingIpc() {
     });
 
     ipcMain.handle("onboarding:get-started", async () => {
-        logger.info("[onboarding] user clicked get started");
+        logger.info("[onboarding] user clicked get started, restarting app");
 
         // Clear the show ready flag
         clearShowReadyFlag();
@@ -1683,7 +1685,9 @@ async function setupOnboardingIpc() {
         // Close the onboarding window
         closeOnboardingPopup();
 
-        return { success: true };
+        // Restart the app so it launches fresh with all permissions active
+        app.relaunch();
+        app.exit(0);
     });
 }
 
