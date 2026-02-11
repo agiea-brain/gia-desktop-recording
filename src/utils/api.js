@@ -13,9 +13,9 @@ const apiRoutes = {
 
 class Api {
     constructor() {
-        // this.apiUrl = "https://api.myagiea.com";
-        this.apiUrl =
-            "https://r0ng0htend.execute-api.us-east-2.amazonaws.com/stage";
+        this.apiUrl = "https://api.myagiea.com";
+        // this.apiUrl =
+        //     "https://r0ng0htend.execute-api.us-east-2.amazonaws.com/stage";
         this.authToken = null;
     }
 

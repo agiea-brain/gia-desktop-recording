@@ -57,10 +57,11 @@ function setupAutoUpdates() {
                 },
             });
             const currentVersion = app.getVersion();
-            logger.info("[auto-update] current version:", currentVersion);
+            logger.info("[auto-update] curent versiorn:", currentVersion);
             logger.info("[auto-update] update-electron-app initialized");
         })
         .catch((err) => {
+            logger.info("[auto-update] current version:", app.getVersion());
             logger.error("[auto-update] failed to initialize", err);
         });
 }
@@ -2168,6 +2169,7 @@ async function bootstrap() {
     setupFileLogging();
     logger.info("[app] starting Gia");
     logger.info("[app] logs folder:", app.getPath("logs"));
+    logger.info("[app] version:", app.getVersion());
 
     // macOS: run as a menu bar app (no dock icon).
     if (process.platform === "darwin") {
