@@ -1242,9 +1242,11 @@ function ensureRecallRuntimeListenersRegistered() {
             );
             // Store meeting info. Important: do NOT call the API here.
             // We only authenticate + fetch upload token after the user confirms.
+            // Seed with URL from meeting-detected when available so registration
+            // doesn't depend on a later meeting-updated event.
             currentMeetingInfo = {
                 windowId: windowId,
-                meetingUrl: null,
+                meetingUrl: evt.window?.url ?? null,
                 uploadToken: null,
                 recordingId: null,
                 sdkUploadId: null,
@@ -2263,9 +2265,11 @@ async function bootstrap() {
                 );
                 // Store meeting info. Important: do NOT call the API here.
                 // We only authenticate + fetch upload token after the user confirms.
+                // Seed with URL from meeting-detected when available so registration
+                // doesn't depend on a later meeting-updated event.
                 currentMeetingInfo = {
                     windowId: windowId,
-                    meetingUrl: null,
+                    meetingUrl: evt.window?.url ?? null,
                     uploadToken: null,
                     recordingId: null,
                     sdkUploadId: null,
