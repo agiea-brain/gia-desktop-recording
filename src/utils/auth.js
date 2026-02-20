@@ -16,11 +16,21 @@ import { loadEnv } from "./load-env";
 // Ensure env is loaded before reading process.env into defaults.
 loadEnv();
 
+function ensureRequiredScopes(scopes) {
+    const parts = String(scopes || "")
+        .split(/\s+/)
+        .filter(Boolean);
+    if (!parts.includes("offline_access")) parts.push("offline_access");
+    return parts.join(" ");
+}
+
 const DEFAULTS = {
     domain: process.env.AUTH0_DOMAIN || "auth.myagiea.com",
     clientId: process.env.AUTH0_CLIENT_ID || "0E4ov2yLLLONevskQiqYzbRotpGdmX4q",
     audience: process.env.AUTH0_AUDIENCE || "https://api.heygia.com",
-    scopes: process.env.AUTH0_SCOPES || "openid profile email",
+    scopes: ensureRequiredScopes(
+        process.env.AUTH0_SCOPES || "openid profile email",
+    ),
     redirectHost: process.env.AUTH0_REDIRECT_HOST || "127.0.0.1",
     redirectPort: Number(process.env.AUTH0_REDIRECT_PORT || 47823),
     redirectPath: process.env.AUTH0_REDIRECT_PATH || "/callback",
@@ -138,7 +148,12 @@ async function startLoopbackCallbackServer({ host, port, callbackPath }) {
 
                 const openAppUrl = `${DEEPLINK_SCHEME}://open`;
 
-                const page = ({ title, heading, body, variant = "success" }) => {
+                const page = ({
+                    title,
+                    heading,
+                    body,
+                    variant = "success",
+                }) => {
                     const safeTitle = escapeHtml(title);
                     const safeHeading = escapeHtml(heading);
                     return `<!doctype html>
@@ -451,6 +466,7 @@ export async function login({
     prompt = "login", // "none" for silent attempt
 } = {}) {
     await app.whenReady();
+    const requestedScopes = ensureRequiredScopes(scopes);
 
     const redirectUri = buildRedirectUri(DEFAULTS);
 
@@ -467,7 +483,7 @@ export async function login({
             response_type: "code",
             redirect_uri: redirectUri,
             audience,
-            scope: scopes,
+            scope: requestedScopes,
             state,
             code_challenge: codeChallenge,
             code_challenge_method: "S256",
@@ -514,7 +530,7 @@ export async function login({
         domain,
         client_id: clientId,
         audience,
-        scopes,
+        scopes: requestedScopes,
         redirect_uri: redirectUri,
     };
 
