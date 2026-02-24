@@ -798,6 +798,29 @@ function buildTrayMenu() {
                   { type: "separator" },
               ]
             : []),
+        ...(api.authToken
+            ? [
+                  {
+                      label: "Logout",
+                      click: async () => {
+                          try {
+                              await performLogout();
+                          } catch (e) {
+                              logger.error("[tray] logout failed:", e);
+                          }
+                      },
+                  },
+                  { type: "separator" },
+              ]
+            : [
+                  {
+                      label: "Login",
+                      click: () => {
+                          showOnboardingPopup({ view: "login" });
+                      },
+                  },
+                  { type: "separator" },
+              ]),
         {
             label: "Quit",
             click: () => app.quit(),
@@ -1255,9 +1278,14 @@ function ensureRecallRuntimeListenersRegistered() {
                 lastRegisterAttemptAt: 0,
             };
 
-            // Show popup to ask if user wants to record
-            logger.info("[recall] showing meeting popup...");
-            showMeetingPopup();
+            // Only show popup if logged in; otherwise the meeting info is
+            // stored and the popup will appear after login completes.
+            if (api.authToken) {
+                logger.info("[recall] showing meeting popup...");
+                showMeetingPopup();
+            } else {
+                logger.info("[recall] meeting stored, waiting for login before showing popup");
+            }
             refreshTrayMenu();
         } catch (e) {
             logger.error("[recall] meeting detection failed:", e);
@@ -1988,6 +2016,59 @@ async function stopMeetingRecording() {
     }
 }
 
+async function performLogout() {
+    logger.info("[logout] user initiated logout from tray");
+
+    // Stop any active recording first
+    if (isRecording) {
+        logger.info("[logout] stopping active recording before logout");
+        try {
+            const windowId = currentMeetingInfo?.windowId;
+            if (windowId) {
+                suppressMeetingPopupForWindow(windowId, "logout");
+            }
+            await stopMeetingRecording();
+        } catch (e) {
+            logger.error("[logout] failed to stop recording:", e);
+        }
+    }
+
+    // Clear recording/meeting state
+    userWantsToRecord = false;
+    recordingStarted = false;
+    currentMeetingInfo = null;
+    suppressedMeetingWindowIds.clear();
+
+    // Close any open popup windows
+    closeMeetingPopup();
+    closeOnboardingPopup();
+
+    // Clear auth tokens
+    await logout();
+    api.setAuthToken(null);
+    await syncUserIdFromProfile();
+
+    // Refresh tray to reflect logged-out state (hides Logout item)
+    refreshTrayMenu();
+
+    logger.info("[logout] tokens cleared, starting interactive login");
+
+    // Immediately prompt re-login via Auth0 browser flow
+    try {
+        await ensureAccessToken({ interactive: true });
+        logger.info("[logout] re-login complete");
+        refreshTrayMenu();
+
+        // If a meeting was detected while logged out, show the popup now
+        if (currentMeetingInfo && !isRecording) {
+            logger.info("[logout] showing deferred meeting popup after re-login");
+            showMeetingPopup();
+        }
+    } catch (e) {
+        logger.warn("[logout] re-login failed (user can retry from tray):", e);
+    }
+}
+
 async function setupMeetingPopupIpc() {
     ipcMain.handle("meeting-popup:confirm-recording", async () => {
         if (!currentMeetingInfo) {
@@ -2278,9 +2359,14 @@ async function bootstrap() {
                     lastRegisterAttemptAt: 0,
                 };
 
-                // Show popup to ask if user wants to record
-                logger.info("[recall] showing meeting popup...");
-                showMeetingPopup();
+                // Only show popup if logged in; otherwise the meeting info is
+                // stored and the popup will appear after login completes.
+                if (api.authToken) {
+                    logger.info("[recall] showing meeting popup...");
+                    showMeetingPopup();
+                } else {
+                    logger.info("[recall] meeting stored, waiting for login before showing popup");
+                }
                 refreshTrayMenu();
             } catch (e) {
                 logger.error("[recall] meeting detection failed:", e);
@@ -2495,19 +2581,12 @@ async function bootstrap() {
         api.setAuthToken(auth.accessToken);
         await syncUserIdFromProfile();
         sendDesktopSdkDiagnosticsIfNeeded();
+        refreshTrayMenu();
 
-        // If somehow not authenticated after onboarding, show login
+        // If not authenticated after onboarding, show login popup
         if (!auth.authenticated) {
-            try {
-                logger.info("[auth] starting interactive login...");
-                await ensureAccessToken({ interactive: true });
-                logger.info("[auth] login complete");
-            } catch (e) {
-                logger.warn(
-                    "[auth] login failed (continuing without auth):",
-                    e,
-                );
-            }
+            logger.info("[auth] not authenticated, showing login popup");
+            showOnboardingPopup({ view: "login" });
         }
         return;
     }
