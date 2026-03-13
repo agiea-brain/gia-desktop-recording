@@ -423,10 +423,14 @@ async function refreshAccessToken({ domain, clientId, refreshToken }) {
 
 export async function getStoredAccessToken({ allowRefresh = true } = {}) {
     const stored = await readStoredTokens();
-    if (!stored?.access_token || !stored?.expires_at) return null;
+    if (!stored) return null;
 
-    if (Date.now() < stored.expires_at) return stored;
+    // Valid, non-expired access token — return immediately.
+    if (stored.access_token && stored.expires_at && Date.now() < stored.expires_at) {
+        return stored;
+    }
 
+    // No refresh path available — nothing we can do.
     if (!allowRefresh || !stored.refresh_token) return null;
 
     // attempt refresh
@@ -453,7 +457,17 @@ export async function getStoredAccessToken({ allowRefresh = true } = {}) {
         await writeStoredTokens(next);
         return next;
     } catch (e) {
-        await clearStoredTokens();
+        // Preserve the refresh_token so the next attempt can retry.
+        // Only wipe everything when there's no refresh_token left to try.
+        if (stored.refresh_token) {
+            await writeStoredTokens({
+                ...stored,
+                access_token: null,
+                expires_at: 0,
+            });
+        } else {
+            await clearStoredTokens();
+        }
         throw e;
     }
 }

@@ -192,6 +192,10 @@ function clearMeetingPopupSuppression(windowId) {
 let userProfileFetchInFlight = null;
 let userProfileToken = null;
 let cachedUserId = null;
+let cachedBotlessEnabled = false;
+let userProfileLastFetchedAt = 0;
+const PROFILE_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+let profileRefreshTimer = null;
 
 let desktopDiagnosticsInFlight = null;
 let desktopDiagnosticsToken = null;
@@ -297,18 +301,23 @@ async function sendDesktopSdkDiagnosticsIfNeeded() {
     return await desktopDiagnosticsInFlight;
 }
 
-async function syncUserIdFromProfile() {
+async function syncUserIdFromProfile({ forceRefresh = false } = {}) {
     const token = api?.authToken || null;
     if (!token) {
         cachedUserId = null;
+        cachedBotlessEnabled = false;
         userProfileToken = null;
+        userProfileLastFetchedAt = 0;
         logger.setUserId(null);
+        stopProfileRefreshTimer();
         return null;
     }
 
-    // Avoid refetching if token hasn't changed and we already have a user id.
-    if (userProfileToken === token && cachedUserId) {
+    // Avoid refetching if token hasn't changed and we already have a user id
+    // (unless force-refreshing to pick up preference changes).
+    if (!forceRefresh && userProfileToken === token && cachedUserId) {
         logger.setUserId(cachedUserId);
+        startProfileRefreshTimer();
         return cachedUserId;
     }
 
@@ -323,10 +332,15 @@ async function syncUserIdFromProfile() {
             const profile = await api.getUserProfile();
             const uid = typeof profile?._id === "string" ? profile._id : null;
             cachedUserId = uid;
+            cachedBotlessEnabled = Boolean(profile?.preferences?.botlessEnabled);
+            userProfileLastFetchedAt = Date.now();
             logger.setUserId(uid);
+            logger.info("[auth] botlessEnabled:", cachedBotlessEnabled);
+            startProfileRefreshTimer();
             return uid;
         } catch (e) {
             cachedUserId = null;
+            cachedBotlessEnabled = false;
             logger.setUserId(null);
             logger.warn("[auth] failed to fetch user profile for userId", e);
             return null;
@@ -336,6 +350,25 @@ async function syncUserIdFromProfile() {
     })();
 
     return await userProfileFetchInFlight;
+}
+
+function startProfileRefreshTimer() {
+    if (profileRefreshTimer) return;
+    profileRefreshTimer = setInterval(async () => {
+        if (!api?.authToken) {
+            stopProfileRefreshTimer();
+            return;
+        }
+        logger.info("[auth] periodic profile refresh");
+        await syncUserIdFromProfile({ forceRefresh: true });
+    }, PROFILE_REFRESH_INTERVAL_MS);
+}
+
+function stopProfileRefreshTimer() {
+    if (profileRefreshTimer) {
+        clearInterval(profileRefreshTimer);
+        profileRefreshTimer = null;
+    }
 }
 
 function readPermissionStates() {
@@ -683,7 +716,14 @@ async function startMeetingRecordingWithAuth({ source = "unknown" } = {}) {
         await getUploadTokenAndStoreInfo();
         logger.info(`[recall] uploadToken: ${currentMeetingInfo.uploadToken}`);
         await registerCurrentMeetingUrlIfNeeded();
-        logger.info(`[recall] meeting URL registration check complete`);
+        if (!currentMeetingInfo.lastRegisteredMeetingUrl) {
+            logger.info(
+                "[recall] meeting URL not yet registered (URL=%s) — will register when meeting-updated provides it",
+                currentMeetingInfo.meetingUrl ?? "null",
+            );
+        } else {
+            logger.info("[recall] meeting URL registration check complete");
+        }
         await startMeetingRecording();
     } catch (error) {
         logger.error(
@@ -1278,13 +1318,15 @@ function ensureRecallRuntimeListenersRegistered() {
                 lastRegisterAttemptAt: 0,
             };
 
-            // Only show popup if logged in; otherwise the meeting info is
-            // stored and the popup will appear after login completes.
-            if (api.authToken) {
+            // Only show popup if logged in and botless recording is enabled.
+            if (!api.authToken) {
+                logger.info("[recall] meeting stored, waiting for login before showing popup");
+            } else if (!cachedBotlessEnabled) {
+                logger.info("[recall] meeting ignored (botlessEnabled is false for this user)");
+                currentMeetingInfo = null;
+            } else {
                 logger.info("[recall] showing meeting popup...");
                 showMeetingPopup();
-            } else {
-                logger.info("[recall] meeting stored, waiting for login before showing popup");
             }
             refreshTrayMenu();
         } catch (e) {
@@ -1872,7 +1914,22 @@ async function registerCurrentMeetingUrlIfNeeded() {
         return;
     }
 
+    const recordingId = currentMeetingInfo.recordingId ?? null;
+    const sdkUploadId = currentMeetingInfo.sdkUploadId ?? null;
+
+    // Don't proceed (or count as an attempt) until we have all required data.
+    // meeting-updated can fire before getUploadTokenAndStoreInfo completes;
+    // skipping here lets the post-upload-token call succeed without throttle.
+    if (!recordingId || !sdkUploadId) {
+        logger.info(
+            "[recall] register meeting URL deferred (waiting for recording ID / SDK upload ID)",
+        );
+        return;
+    }
+
     // Dedupe and throttle to avoid spamming the API.
+    // Placed after the recordingId/sdkUploadId check so that incomplete
+    // attempts don't block later calls that have all required data.
     const now = Date.now();
     const alreadyRegistered =
         currentMeetingInfo.lastRegisteredMeetingUrl === meetingUrl;
@@ -1897,16 +1954,6 @@ async function registerCurrentMeetingUrlIfNeeded() {
         if (!accessToken) {
             logger.info(
                 "[recall] cannot register meeting URL (not authenticated)",
-            );
-            return;
-        }
-
-        const recordingId = currentMeetingInfo.recordingId ?? null;
-        const sdkUploadId = currentMeetingInfo.sdkUploadId ?? null;
-
-        if (!recordingId || !sdkUploadId) {
-            logger.info(
-                "[recall] cannot register meeting URL (no recording ID or SDK upload ID)",
             );
             return;
         }
@@ -2060,7 +2107,7 @@ async function performLogout() {
         refreshTrayMenu();
 
         // If a meeting was detected while logged out, show the popup now
-        if (currentMeetingInfo && !isRecording) {
+        if (currentMeetingInfo && !isRecording && cachedBotlessEnabled) {
             logger.info("[logout] showing deferred meeting popup after re-login");
             showMeetingPopup();
         }
@@ -2359,13 +2406,15 @@ async function bootstrap() {
                     lastRegisterAttemptAt: 0,
                 };
 
-                // Only show popup if logged in; otherwise the meeting info is
-                // stored and the popup will appear after login completes.
-                if (api.authToken) {
+                // Only show popup if logged in and botless recording is enabled.
+                if (!api.authToken) {
+                    logger.info("[recall] meeting stored, waiting for login before showing popup");
+                } else if (!cachedBotlessEnabled) {
+                    logger.info("[recall] meeting ignored (botlessEnabled is false for this user)");
+                    currentMeetingInfo = null;
+                } else {
                     logger.info("[recall] showing meeting popup...");
                     showMeetingPopup();
-                } else {
-                    logger.info("[recall] meeting stored, waiting for login before showing popup");
                 }
                 refreshTrayMenu();
             } catch (e) {
