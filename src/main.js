@@ -416,6 +416,48 @@ function readPermissionStates() {
     };
 }
 
+function areAllPermissionsGranted() {
+    const p = readPermissionStates();
+    return (
+        p.microphone === "granted" &&
+        p.accessibility === true &&
+        p.screenCapture === "granted"
+    );
+}
+
+function getPermissionsBooleans() {
+    const p = readPermissionStates();
+    return {
+        microphone: p.microphone === "granted",
+        accessibility: p.accessibility === true,
+        screen: p.screenCapture === "granted",
+    };
+}
+
+function handlePermissionRevocation({ prev, next, reason }) {
+    if (!prev) return; // first run, nothing to compare
+
+    // Detect any permission that went from granted → not granted
+    const micRevoked = prev.microphone === "granted" && next.microphone !== "granted";
+    const accRevoked = prev.accessibility === true && next.accessibility !== true;
+    const scrRevoked = prev.screenCapture === "granted" && next.screenCapture !== "granted";
+
+    if (!micRevoked && !accRevoked && !scrRevoked) return;
+
+    logger.info("[permissions] permission revoked, showing permissions popup", {
+        reason,
+        revoked: { mic: micRevoked, accessibility: accRevoked, screen: scrRevoked },
+    });
+
+    // Don't open a second popup if one is already showing
+    if (onboardingWindow && !onboardingWindow.isDestroyed()) {
+        bringOnboardingToFront("permission-revoked");
+        return;
+    }
+
+    showOnboardingPopup({ view: "permissions" });
+}
+
 let accessibilityTrustedAtStartup = null; // true/false/null (unknown)
 let accessibilityRelaunchInFlight = false;
 
@@ -1212,7 +1254,7 @@ function showOnboardingPopup({ view = "login" } = {}) {
 
     onboardingWindow = new BrowserWindow({
         width: 440,
-        height: view === "ready" ? 480 : view === "permissions" ? 570 : 340,
+        height: view === "ready" ? 460 : view === "permissions" ? 520 : 480,
         resizable: false,
         minimizable: true,
         maximizable: false,
@@ -1243,14 +1285,9 @@ function showOnboardingPopup({ view = "login" } = {}) {
                 });
 
                 // Send initial state
-                const permissions = readPermissionStates();
                 onboardingWindow.webContents.send("onboarding:init", {
                     view,
-                    permissions: {
-                        microphone: permissions.microphone === "granted",
-                        accessibility: permissions.accessibility === true,
-                        screen: permissions.screenCapture === "granted",
-                    },
+                    permissions: getPermissionsBooleans(),
                 });
             }
         } catch (e) {
@@ -1564,7 +1601,7 @@ function ensureSdkInitialized() {
                 const mappedPermission = permissionMap[permission];
                 if (mappedPermission) {
                     const granted = status === "granted" || status === true;
-                    logger.info(
+                            logger.info(
                         `[onboarding] sending permission status: ${mappedPermission} = ${granted}`,
                     );
                     onboardingWindow.webContents.send(
@@ -1755,6 +1792,7 @@ async function setupOnboardingIpc() {
                         reason,
                     });
                     sendDesktopSdkDiagnosticsIfNeeded();
+                    handlePermissionRevocation({ prev, next, reason });
                 },
             });
         } catch (e) {
@@ -1770,16 +1808,11 @@ async function setupOnboardingIpc() {
         // Show the ready view in the existing onboarding window.
         try {
             if (onboardingWindow && !onboardingWindow.isDestroyed()) {
-                onboardingWindow.setSize(440, 480, true);
+                onboardingWindow.setSize(440, 460, true);
                 onboardingWindow.center();
-                const permissions = readPermissionStates();
                 onboardingWindow.webContents.send("onboarding:init", {
                     view: "ready",
-                    permissions: {
-                        microphone: permissions.microphone === "granted",
-                        accessibility: permissions.accessibility === true,
-                        screen: permissions.screenCapture === "granted",
-                    },
+                    permissions: getPermissionsBooleans(),
                 });
                 bringOnboardingToFront("onboarding-complete-ready");
             }
@@ -2370,9 +2403,9 @@ async function bootstrap() {
 
         setupPermissionLogging({
             onChange: ({ prev, next, reason }) => {
-                // Keep existing relaunch behavior and also update diagnostics.
                 maybeRelaunchAfterAccessibilityGranted({ prev, next, reason });
                 sendDesktopSdkDiagnosticsIfNeeded();
+                handlePermissionRevocation({ prev, next, reason });
             },
         });
 
@@ -2648,15 +2681,9 @@ async function bootstrap() {
         sendDesktopSdkDiagnosticsIfNeeded();
 
         // Check if all permissions are actually granted before showing ready
-        const perms = readPermissionStates();
-        const allGranted =
-            perms.microphone === "granted" &&
-            perms.accessibility === true &&
-            perms.screenCapture === "granted";
-        if (!allGranted) {
+        if (!areAllPermissionsGranted()) {
             logger.info(
                 "[onboarding] missing permissions after restart, showing permissions instead of ready",
-                perms,
             );
             showOnboardingPopup({ view: "permissions" });
         } else {
@@ -2683,15 +2710,9 @@ async function bootstrap() {
         }
 
         // If any permission is missing, reopen permissions popup
-        const perms = readPermissionStates();
-        const allGranted =
-            perms.microphone === "granted" &&
-            perms.accessibility === true &&
-            perms.screenCapture === "granted";
-        if (!allGranted) {
+        if (!areAllPermissionsGranted()) {
             logger.info(
                 "[onboarding] missing permissions after restart, reopening permissions popup",
-                perms,
             );
             showOnboardingPopup({ view: "permissions" });
         }

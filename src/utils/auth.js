@@ -116,8 +116,12 @@ function normalizeTokens(tokenResponse) {
     };
 }
 
-async function startLoopbackCallbackServer({ host, port, callbackPath }) {
+async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs = 300000 }) {
     return await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            try { server.close(); } catch {}
+            reject(new Error("Login callback timed out"));
+        }, timeoutMs);
         const server = http.createServer((req, res) => {
             try {
                 const url = new URL(req.url || "", `http://${host}:${port}`);
@@ -375,8 +379,10 @@ async function startLoopbackCallbackServer({ host, port, callbackPath }) {
                     );
                 }
 
+                clearTimeout(timeout);
                 resolve({ code, state, error, errorDescription });
             } catch (e) {
+                clearTimeout(timeout);
                 reject(e);
             } finally {
                 // close shortly after responding
@@ -518,11 +524,13 @@ export async function login({
             prompt,
         }).toString();
 
-    // Start the loopback server to receive the callback
+    // Start the loopback server to receive the callback.
+    // Silent auth (prompt=none) gets a shorter timeout since Auth0 redirects instantly.
     const callbackPromise = startLoopbackCallbackServer({
         host: DEFAULTS.redirectHost,
         port: DEFAULTS.redirectPort,
         callbackPath: DEFAULTS.redirectPath,
+        timeoutMs: prompt === "none" ? 15000 : 300000,
     });
 
     // Open auth URL in the system default browser

@@ -6,59 +6,43 @@
         <title>Welcome to Gia</title>
         <style>
             :root {
-                --background: hsl(0, 0%, 100%);
-                --foreground: hsl(0, 0%, 3.9%);
-                --card: hsl(0, 0%, 100%);
-                --card-foreground: hsl(0, 0%, 3.9%);
-                --primary: hsl(0, 0%, 9%);
-                --primary-foreground: hsl(0, 0%, 98%);
-                --secondary: hsl(0, 0%, 96.1%);
-                --secondary-foreground: hsl(0, 0%, 9%);
-                --muted: hsl(0, 0%, 96.1%);
-                --muted-foreground: hsl(0, 0%, 45.1%);
-                --accent: hsl(0, 0%, 96.1%);
-                --accent-foreground: hsl(0, 0%, 9%);
-                --destructive: hsl(0, 84.2%, 60.2%);
-                --destructive-foreground: hsl(0, 0%, 98%);
-                --border: hsl(0, 0%, 89.8%);
-                --input: hsl(0, 0%, 89.8%);
-                --ring: hsl(0, 0%, 3.9%);
-                --radius: 0.5rem;
-                --success: hsl(142, 76%, 36%);
-                --success-light: hsl(142, 76%, 94%);
+                --background: #ffffff;
+                --foreground: #0a0a0a;
+                --muted: #737373;
+                --border: #e5e5e5;
+                --primary: #171717;
+                --primary-fg: #fafafa;
+                --secondary: #f5f5f5;
+                --success: #16a34a;
+                --success-light: #dcfce7;
+                --radius: 12px;
             }
 
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-            
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+
             body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
                 background: var(--background);
                 color: var(--foreground);
                 overflow: hidden;
                 -webkit-font-smoothing: antialiased;
-                -moz-osx-font-smoothing: grayscale;
             }
-            
+
+            /* Titlebar */
             .titlebar {
-                height: 36px;
-                background: var(--background);
-                border-bottom: 1px solid var(--border);
+                height: 40px;
                 display: flex;
                 align-items: center;
-                padding: 0 12px;
+                padding: 0 14px;
                 -webkit-app-region: drag;
             }
-            
+
             .window-controls {
                 display: flex;
                 gap: 8px;
                 -webkit-app-region: no-drag;
             }
-            
+
             .window-btn {
                 width: 12px;
                 height: 12px;
@@ -67,99 +51,56 @@
                 cursor: pointer;
                 transition: opacity 0.15s;
             }
-            
-            .window-btn:hover {
-                opacity: 0.8;
-            }
-            
-            .btn-close {
-                background: #ff5f57;
-            }
-            
-            .btn-minimize {
-                background: #febc2e;
-            }
-            
+            .window-btn:hover { opacity: 0.8; }
+            .btn-close { background: #ff5f57; }
+            .btn-minimize { background: #febc2e; }
+            .btn-maximize { background: #28c840; }
+
+            /* Layout */
             .container {
-                padding: 32px;
+                padding: 0 28px 28px;
                 -webkit-app-region: no-drag;
                 display: flex;
                 flex-direction: column;
-                align-items: center;
-                text-align: center;
+                height: calc(100vh - 40px);
             }
 
-            .gia-logo {
-                width: 64px;
-                height: 64px;
-                border-radius: 16px;
-                object-fit: contain;
-                margin-bottom: 24px;
+            .view {
+                display: none;
+                flex-direction: column;
+                flex: 1;
             }
-            
-            h1 {
-                font-size: 24px;
-                font-weight: 600;
-                color: var(--foreground);
-                letter-spacing: -0.025em;
-                margin-bottom: 8px;
-            }
-            
-            p {
-                font-size: 14px;
-                color: var(--muted-foreground);
-                line-height: 1.6;
-                max-width: 320px;
+            .view.active { display: flex; }
+
+            .view-body {
+                flex: 1;
             }
 
-            .subtitle {
-                margin-bottom: 32px;
-            }
-            
             /* Buttons */
             .btn {
-                padding: 12px 24px;
+                width: 100%;
+                padding: 14px 24px;
                 border-radius: var(--radius);
-                font-size: 14px;
-                font-weight: 500;
+                font-size: 15px;
+                font-weight: 600;
                 cursor: pointer;
                 transition: all 0.15s ease;
-                display: inline-flex;
+                display: flex;
                 align-items: center;
                 justify-content: center;
                 gap: 8px;
-                min-width: 200px;
-            }
-            
-            .btn-primary {
+                border: 2px solid var(--primary);
                 background: var(--primary);
-                color: var(--primary-foreground);
-                border: 1px solid var(--primary);
+                color: var(--primary-fg);
+                flex-shrink: 0;
             }
-            
-            .btn-primary:hover:not(:disabled) {
-                background: hsl(0, 0%, 15%);
-                border-color: hsl(0, 0%, 15%);
+            .btn:hover:not(:disabled) {
+                background: #2a2a2a;
+                border-color: #2a2a2a;
             }
-            
-            .btn-secondary {
-                background: var(--background);
-                color: var(--foreground);
-                border: 1px solid var(--border);
-            }
-            
-            .btn-secondary:hover:not(:disabled) {
-                background: var(--secondary);
-            }
-
             .btn:disabled {
-                opacity: 0.5;
+                opacity: 0.4;
                 cursor: not-allowed;
-            }
-
-            .btn:focus-visible {
-                outline: 2px solid var(--ring);
-                outline-offset: 2px;
             }
 
             /* Spinner */
@@ -171,26 +112,124 @@
                 border-radius: 50%;
                 animation: spin 0.6s linear infinite;
             }
+            @keyframes spin { to { transform: rotate(360deg); } }
 
-            @keyframes spin {
-                to { transform: rotate(360deg); }
+            /* ==================== LOGIN VIEW ==================== */
+            #loginView {
+                align-items: center;
+                text-align: center;
             }
 
-            /* Stepper */
+            .login-logo {
+                width: 56px;
+                height: 56px;
+                border-radius: 0;
+                object-fit: contain;
+                margin-bottom: 20px;
+                align-self: center;
+                overflow: visible;
+            }
+
+            .login-heading {
+                font-size: 22px;
+                font-weight: 700;
+                letter-spacing: -0.03em;
+                margin-bottom: 8px;
+                color: var(--foreground);
+            }
+
+            .login-subtitle {
+                font-size: 14px;
+                color: var(--muted);
+                line-height: 1.5;
+                max-width: 300px;
+                margin-bottom: 28px;
+            }
+
+            .feature-list {
+                list-style: none;
+                width: 100%;
+                text-align: left;
+                margin-bottom: 28px;
+            }
+
+            .feature-list li {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                padding: 10px 0;
+                font-size: 14px;
+                color: var(--foreground);
+            }
+
+            .feature-icon {
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .feature-icon svg {
+                width: 18px;
+                height: 18px;
+            }
+            .feature-icon.mic { background: #fef3c7; color: #d97706; }
+            .feature-icon.transcript { background: #dbeafe; color: #2563eb; }
+            .feature-icon.summary { background: #dcfce7; color: #16a34a; }
+
+            /* ==================== PERMISSIONS VIEW ==================== */
+            #permissionsView { text-align: left; }
+
+            .perm-heading {
+                font-size: 22px;
+                font-weight: 700;
+                letter-spacing: -0.03em;
+                margin-bottom: 6px;
+            }
+
+            .perm-subtitle {
+                font-size: 14px;
+                color: var(--muted);
+                line-height: 1.5;
+                margin-bottom: 20px;
+            }
+
+            /* Progress bar */
+            .progress-bar {
+                display: flex;
+                gap: 6px;
+                margin-bottom: 20px;
+            }
+            .progress-segment {
+                flex: 1;
+                height: 4px;
+                border-radius: 2px;
+                background: var(--border);
+                transition: background 0.3s ease;
+            }
+            .progress-segment.filled {
+                background: var(--primary);
+            }
+            .progress-segment.success {
+                background: var(--success);
+            }
+
+            /* Steps */
             .stepper {
                 width: 100%;
-                margin-bottom: 32px;
+                margin-bottom: 20px;
             }
 
             .step {
                 display: flex;
                 align-items: center;
-                gap: 16px;
-                padding: 16px;
-                border: 1px solid var(--border);
+                gap: 14px;
+                padding: 14px 16px;
+                border: 1.5px solid var(--border);
                 border-radius: var(--radius);
-                margin-bottom: 12px;
-                text-align: left;
+                margin-bottom: 10px;
                 transition: all 0.2s ease;
             }
 
@@ -205,26 +244,26 @@
             }
 
             .step.pending {
-                opacity: 0.5;
+                opacity: 0.45;
             }
 
             .step-number {
-                width: 32px;
-                height: 32px;
+                width: 30px;
+                height: 30px;
                 border-radius: 50%;
-                background: var(--muted);
-                color: var(--muted-foreground);
+                background: #e5e5e5;
+                color: var(--muted);
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-weight: 600;
-                font-size: 14px;
+                font-weight: 700;
+                font-size: 13px;
                 flex-shrink: 0;
             }
 
             .step.active .step-number {
                 background: var(--primary);
-                color: var(--primary-foreground);
+                color: var(--primary-fg);
             }
 
             .step.completed .step-number {
@@ -232,41 +271,38 @@
                 color: white;
             }
 
-            .step-content {
-                flex: 1;
-            }
+            .step-content { flex: 1; }
 
             .step-title {
                 font-weight: 600;
                 font-size: 14px;
                 color: var(--foreground);
-                margin-bottom: 2px;
+                margin-bottom: 1px;
             }
 
             .step-description {
                 font-size: 13px;
-                color: var(--muted-foreground);
+                color: var(--muted);
             }
 
             .step-status {
-                font-size: 12px;
+                font-size: 13px;
                 color: var(--success);
-                font-weight: 500;
+                font-weight: 600;
+                flex-shrink: 0;
             }
 
             .open-settings-link {
                 display: none;
                 font-size: 13px;
-                color: hsl(211, 100%, 50%);
+                font-weight: 600;
+                color: var(--foreground);
                 cursor: pointer;
-                margin-top: 6px;
+                margin-top: 3px;
+            }
+            .open-settings-link:hover {
                 text-decoration: underline;
             }
-
-            .open-settings-link:hover {
-                color: hsl(211, 100%, 40%);
-            }
-
             .step.active .open-settings-link {
                 display: block;
             }
@@ -276,58 +312,86 @@
                 height: 16px;
             }
 
-            /* Views */
-            .view {
-                display: none;
-            }
-
-            .view.active {
+            .view-body--centered {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
             }
 
-            /* Ready view icon */
-            .success-icon {
-                width: 64px;
-                height: 64px;
+            .btn-maximize {
+                cursor: default;
+            }
+
+            /* ==================== READY VIEW ==================== */
+            #readyView {
+                align-items: center;
+                text-align: center;
+            }
+
+            .ready-icon {
+                width: 56px;
+                height: 56px;
                 border-radius: 50%;
                 background: var(--success-light);
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                margin-bottom: 20px;
+                align-self: center;
+            }
+            .ready-icon svg {
+                width: 28px;
+                height: 28px;
+                color: var(--success);
+            }
+
+            .ready-heading {
+                font-size: 22px;
+                font-weight: 700;
+                letter-spacing: -0.03em;
+                margin-bottom: 8px;
+            }
+
+            .ready-subtitle {
+                font-size: 14px;
+                color: var(--muted);
+                line-height: 1.5;
+                max-width: 320px;
                 margin-bottom: 24px;
             }
 
-            .success-icon svg {
-                width: 32px;
-                height: 32px;
-                color: var(--success);
+            .info-card {
+                width: 100%;
+                background: var(--secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 20px 22px;
+                text-align: left;
+                margin-bottom: 24px;
             }
 
-            /* Feature list */
-            .features {
-                text-align: left;
-                margin: 24px 0;
-                padding: 0;
+            .info-card ul {
                 list-style: none;
             }
 
-            .features li {
+            .info-card li {
                 display: flex;
                 align-items: flex-start;
-                gap: 12px;
-                margin-bottom: 12px;
+                gap: 10px;
                 font-size: 14px;
                 color: var(--foreground);
+                line-height: 1.5;
+                margin-bottom: 12px;
             }
+            .info-card li:last-child { margin-bottom: 0; }
 
-            .features li svg {
-                width: 20px;
-                height: 20px;
-                color: var(--success);
+            .info-card .dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: var(--muted);
                 flex-shrink: 0;
-                margin-top: 1px;
+                margin-top: 7px;
             }
         </style>
     </head>
@@ -336,100 +400,130 @@
             <div class="window-controls">
                 <button class="window-btn btn-close" id="closeBtn" title="Close"></button>
                 <button class="window-btn btn-minimize" id="minimizeBtn" title="Minimize"></button>
+                <button class="window-btn btn-maximize" title="Maximize"></button>
             </div>
         </div>
-        
+
         <div class="container">
             <!-- Login View -->
             <div class="view active" id="loginView">
-                <img class="gia-logo" id="giaLogo" alt="Gia" />
-                <h1>Welcome to Gia</h1>
-                <p class="subtitle">Your AI meeting assistant. <br> Sign in to get started with automatic meeting
-                                                                     recording and transcription.</p>
-                <button class="btn btn-primary" id="loginBtn">
-                    Sign in with Gia
-                </button>
+                <div class="view-body view-body--centered">
+                    <img class="login-logo" id="giaLogo" alt="Gia" />
+                    <h1 class="login-heading">Never miss a meeting detail</h1>
+                    <p class="login-subtitle">Transcribe, and summarize every call</p>
+
+                    <ul class="feature-list">
+                        <li>
+                            <div class="feature-icon mic">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                                </svg>
+                            </div>
+                            <span>Auto-join and capture meeting audio</span>
+                        </li>
+                        <li>
+                            <div class="feature-icon transcript">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                </svg>
+                            </div>
+                            <span>Searchable transcripts with speaker labels</span>
+                        </li>
+                        <li>
+                            <div class="feature-icon summary">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                </svg>
+                            </div>
+                            <span>Gia generates summaries and action items</span>
+                        </li>
+                    </ul>
+                </div>
+                <button class="btn" id="loginBtn">Continue with Gia</button>
             </div>
 
             <!-- Permissions View -->
             <div class="view" id="permissionsView">
-                <h1>Setup Permissions</h1>
-                <p class="subtitle">Gia needs a few permissions to record your meetings. We'll guide you through each one.</p>
-                
-                <div class="stepper">
-                    <div class="step" id="step-microphone" data-step="microphone">
-                        <div class="step-number">1</div>
-                        <div class="step-content">
-                            <div class="step-title">Microphone Access</div>
-                            <div class="step-description">To capture audio from your meetings</div>
-                            <div class="open-settings-link" data-permission="microphone">Open in System Settings &rsaquo;</div>
-                        </div>
-                        <div class="step-status"></div>
+                <div class="view-body">
+                    <h1 class="perm-heading">Grant permissions</h1>
+                    <p class="perm-subtitle">Three quick system permissions to get Gia running.</p>
+
+                    <div class="progress-bar" id="progressBar">
+                        <div class="progress-segment" id="prog-0"></div>
+                        <div class="progress-segment" id="prog-1"></div>
+                        <div class="progress-segment" id="prog-2"></div>
                     </div>
 
-                    <div class="step pending" id="step-accessibility" data-step="accessibility">
-                        <div class="step-number">2</div>
-                        <div class="step-content">
-                            <div class="step-title">Accessibility</div>
-                            <div class="step-description">To detect when meetings start</div>
-                            <div class="open-settings-link" data-permission="accessibility">Open in System Settings &rsaquo;</div>
+                    <div class="stepper">
+                        <div class="step" id="step-microphone" data-step="microphone">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <div class="step-title">Microphone</div>
+                                <div class="step-description">Capture meeting audio</div>
+                                <div class="open-settings-link" data-permission="microphone">Open System Settings</div>
+                            </div>
+                            <div class="step-status"></div>
                         </div>
-                        <div class="step-status"></div>
-                    </div>
 
-                    <div class="step pending" id="step-screen" data-step="screen">
-                        <div class="step-number">3</div>
-                        <div class="step-content">
-                            <div class="step-title">Screen Recording</div>
-                            <div class="step-description">To capture meeting content</div>
-                            <div class="open-settings-link" data-permission="screen">Open in System Settings &rsaquo;</div>
+                        <div class="step pending" id="step-accessibility" data-step="accessibility">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <div class="step-title">Accessibility</div>
+                                <div class="step-description">Detect when meetings start</div>
+                                <div class="open-settings-link" data-permission="accessibility">Open System Settings</div>
+                            </div>
+                            <div class="step-status"></div>
                         </div>
-                        <div class="step-status"></div>
+
+                        <div class="step pending" id="step-screen" data-step="screen">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <div class="step-title">Screen recording</div>
+                                <div class="step-description">Capture the speaker name</div>
+                                <div class="open-settings-link" data-permission="screen">Open System Settings</div>
+                            </div>
+                            <div class="step-status"></div>
+                        </div>
                     </div>
                 </div>
-
-                <button class="btn btn-primary" id="permissionBtn" style="margin-bottom: 24px;">
-                    Grant Microphone Access
-                </button>
+                <button class="btn" id="permissionBtn">Grant microphone access</button>
             </div>
 
             <!-- Ready View -->
             <div class="view" id="readyView">
-                <div class="success-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
-                </div>
-                <h1>You're all set!</h1>
-                <p class="subtitle">Gia is now ready to help you with your meetings.</p>
-                
-                <ul class="features">
-                    <li>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <div class="view-body view-body--centered">
+                    <div class="ready-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
-                        <span>When a meeting is detected, you'll see a popup asking if you want to record</span>
-                    </li>
-                    <li>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        <span>Gia runs in your menu bar, click the icon to access settings</span>
-                    </li>
-                    <li>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        <span>Your recordings are automatically transcribed and summarized</span>
-                    </li>
-                </ul>
+                    </div>
+                    <h1 class="ready-heading">You're good to go</h1>
+                    <p class="ready-subtitle">Gia is running in your menu bar. You'll be prompted when a meeting starts.</p>
 
-                <button class="btn btn-primary" id="getStartedBtn">
-                    Get Started
-                </button>
+                    <div class="info-card">
+                        <ul>
+                            <li>
+                                <div class="dot"></div>
+                                <span>Click the menu bar icon to adjust recording preferences</span>
+                            </li>
+                            <li>
+                                <div class="dot"></div>
+                                <span>Transcripts and summaries appear automatically after each call</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <button class="btn" id="getStartedBtn">Get started</button>
             </div>
         </div>
-        
+
         <script>
             const { ipcRenderer } = require('electron');
 
@@ -474,7 +568,6 @@
             closeBtn.addEventListener('click', () => {
                 ipcRenderer.invoke('onboarding:close');
             });
-
             minimizeBtn.addEventListener('click', () => {
                 ipcRenderer.invoke('onboarding:minimize');
             });
@@ -485,9 +578,30 @@
                 document.getElementById(viewId).classList.add('active');
             }
 
+            // Update progress bar
+            function updateProgressBar() {
+                for (let i = 0; i < 3; i++) {
+                    const seg = document.getElementById('prog-' + i);
+                    seg.classList.remove('filled', 'success');
+                    if (i < currentStepIndex) {
+                        seg.classList.add('success');
+                    } else if (i === currentStepIndex) {
+                        seg.classList.add('filled');
+                    }
+                }
+                // All done
+                if (currentStepIndex >= 3) {
+                    for (let i = 0; i < 3; i++) {
+                        const seg = document.getElementById('prog-' + i);
+                        seg.classList.remove('filled');
+                        seg.classList.add('success');
+                    }
+                }
+            }
+
             // Update step UI
             function updateStepUI(stepName, status) {
-                const stepEl = document.getElementById(`step-${stepName}`);
+                const stepEl = document.getElementById('step-' + stepName);
                 if (!stepEl) return;
 
                 stepEl.classList.remove('active', 'completed', 'pending');
@@ -511,12 +625,13 @@
             function updatePermissionButton() {
                 const step = permissionSteps[currentStepIndex];
                 const labels = {
-                    'microphone': 'Grant Microphone Access',
-                    'accessibility': 'Grant Accessibility Access',
-                    'screen': 'Grant Screen Recording Access'
+                    'microphone': 'Grant microphone access',
+                    'accessibility': 'Grant accessibility access',
+                    'screen': 'Grant screen recording access'
                 };
                 permissionBtn.innerHTML = labels[step] || 'Continue';
                 permissionBtn.disabled = false;
+                updateProgressBar();
             }
 
             // Initialize permissions view
@@ -548,21 +663,20 @@
 
             // Window size constants
             const VIEW_SIZES = {
-                login: { width: 440, height: 340 },
-                permissions: { width: 440, height: 570 },
-                ready: { width: 440, height: 480 }
+                login: { width: 440, height: 480 },
+                permissions: { width: 440, height: 520 },
+                ready: { width: 440, height: 460 }
             };
 
             // Login button
             loginBtn.addEventListener('click', async () => {
                 loginBtn.disabled = true;
                 loginBtn.innerHTML = '<div class="spinner"></div>Signing in...';
-                
+
                 try {
                     const result = await ipcRenderer.invoke('onboarding:login');
                     if (result.success) {
                         console.log('Login successful, moving to permissions');
-                        // Resize window for permissions view
                         await ipcRenderer.invoke('onboarding:resize', VIEW_SIZES.permissions);
                         showView('permissionsView');
                         initPermissionsView();
@@ -570,28 +684,21 @@
                     } else {
                         console.error('Login failed:', result.error);
                         loginBtn.disabled = false;
-                        loginBtn.textContent = 'Sign in with Gia';
+                        loginBtn.textContent = 'Continue with Gia';
                     }
                 } catch (error) {
                     console.error('Login error:', error);
                     loginBtn.disabled = false;
-                    loginBtn.textContent = 'Sign in with Gia';
+                    loginBtn.textContent = 'Continue with Gia';
                 }
             });
 
             // Track if we're waiting for a permission grant
-            // (we do not poll; we rely on Recall SDK permission-status events)
             let waitingForPermission = null;
 
-            function stopPolling() {
-                // legacy no-op (kept to avoid refactors elsewhere)
-            }
-
             function startWaitingForPermission(permission) {
-                stopPolling();
                 waitingForPermission = permission;
-
-                console.log(`Waiting for SDK permission-status event for ${permission}...`);
+                console.log('Waiting for SDK permission-status event for ' + permission + '...');
                 permissionBtn.textContent = 'Waiting for permission...';
                 permissionBtn.disabled = true;
             }
@@ -599,33 +706,31 @@
             // Centralized handler for when a permission is granted
             function handlePermissionGranted(permission) {
                 const stepIndex = permissionSteps.indexOf(permission);
-                // Only process if this is the current step (prevent duplicate handling)
                 if (stepIndex !== currentStepIndex) {
-                    console.log(`Permission ${permission} granted but not current step, ignoring`);
+                    console.log('Permission ' + permission + ' granted but not current step, ignoring');
                     return;
                 }
-                
-                console.log(`Permission ${permission} granted, moving to next step`);
+
+                console.log('Permission ' + permission + ' granted, moving to next step');
                 updateStepUI(permission, 'completed');
                 currentStepIndex++;
-                
+
                 if (currentStepIndex >= permissionSteps.length) {
-                    // All permissions granted - show finish button
                     console.log('All permissions granted!');
-                    permissionBtn.textContent = 'Finish Setup';
+                    permissionBtn.textContent = 'Finish setup';
                     permissionBtn.disabled = false;
+                    updateProgressBar();
                 } else {
-                    // Move to next step
                     updateStepUI(permissionSteps[currentStepIndex], 'active');
                     updatePermissionButton();
                 }
             }
 
             // Open System Settings links
-            document.querySelectorAll('.open-settings-link').forEach(link => {
-                link.addEventListener('click', (e) => {
+            document.querySelectorAll('.open-settings-link').forEach(function(link) {
+                link.addEventListener('click', function(e) {
                     e.stopPropagation();
-                    const permission = link.dataset.permission;
+                    var permission = link.dataset.permission;
                     ipcRenderer.invoke('onboarding:open-settings', permission);
                 });
             });
@@ -633,8 +738,8 @@
             // Permission button
             permissionBtn.addEventListener('click', async () => {
                 const step = permissionSteps[currentStepIndex];
-                
-                // If all permissions done, this is the "Finish Setup" click
+
+                // If all permissions done, this is the "Finish setup" click
                 if (currentStepIndex >= permissionSteps.length) {
                     console.log('Finishing setup...');
                     permissionBtn.disabled = true;
@@ -642,25 +747,24 @@
                     await ipcRenderer.invoke('onboarding:complete');
                     return;
                 }
-                
+
                 // If we're already waiting for this permission, don't request again
                 if (waitingForPermission === step) {
-                    console.log(`Already waiting for ${step} permission, ignoring click`);
+                    console.log('Already waiting for ' + step + ' permission, ignoring click');
                     return;
                 }
-                
+
                 permissionBtn.disabled = true;
                 permissionBtn.innerHTML = '<div class="spinner"></div>Requesting...';
 
                 try {
                     const result = await ipcRenderer.invoke('onboarding:request-permission', step);
-                    console.log(`Permission ${step} result:`, result);
+                    console.log('Permission ' + step + ' result:', result);
 
                     if (result.granted) {
                         handlePermissionGranted(step);
                     } else {
-                        // Permission not granted yet - wait for SDK event or poll
-                        console.log(`${step} not granted yet, waiting...`);
+                        console.log(step + ' not granted yet, waiting...');
                         startWaitingForPermission(step);
                     }
                 } catch (error) {
@@ -689,12 +793,11 @@
             // Handle initial state from main process
             ipcRenderer.on('onboarding:init', async (_event, payload) => {
                 console.log('Onboarding init:', payload);
-                
+
                 if (payload.view === 'ready') {
                     showView('readyView');
                 } else if (payload.view === 'permissions') {
                     showView('permissionsView');
-                    // Set current step based on permissions status
                     if (payload.permissions) {
                         currentStepIndex = 0;
                         if (payload.permissions.microphone) currentStepIndex = 1;
@@ -712,14 +815,11 @@
             ipcRenderer.on('onboarding:permission-status', (_event, payload) => {
                 console.log('Permission status update:', payload);
                 const { permission, granted } = payload;
-                
+
                 if (granted) {
-                    // Stop polling if we were waiting for this permission
                     if (waitingForPermission === permission) {
-                        stopPolling();
                         waitingForPermission = null;
                     }
-                    // Use centralized handler to prevent duplicate processing
                     handlePermissionGranted(permission);
                 }
             });
