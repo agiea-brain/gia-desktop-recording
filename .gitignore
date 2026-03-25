@@ -94,3 +94,7 @@ out/
 .dep.sh
 
 .reset-permissions.sh
+
+.idea/
+
+.env.local

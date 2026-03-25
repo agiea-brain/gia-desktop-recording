@@ -136,6 +136,7 @@ async function startLoopbackCallbackServer({ host, port, callbackPath }) {
 
                 res.writeHead(200, {
                     "Content-Type": "text/html; charset=utf-8",
+                    "Cache-Control": "no-store, no-cache",
                 });
 
                 const escapeHtml = (s) =>
@@ -323,14 +324,27 @@ async function startLoopbackCallbackServer({ host, port, callbackPath }) {
         ${body}
         
         <div class="actions">
-          <a class="btn" href="${openAppUrl}">Open Gia</a>
+          <a class="btn" id="openBtn" href="${openAppUrl}">Open Gia</a>
         </div>
-        
+
         <div class="fineprint">
-          If the “Open Gia” button doesn’t work, switch back to the Gia app from your Dock / menu bar.
+          If the "Open Gia" button doesn’t work, switch back to the Gia app from your Dock / menu bar.
         </div>
       </div>
     </div>
+    <script>
+      document.getElementById("openBtn").addEventListener("click", function() {
+        setTimeout(function() { window.close(); }, 500);
+      });
+      // Auto-open Gia on success via hidden iframe (keeps page visible)
+      if (document.querySelector(".status-icon.success")) {
+        var f = document.createElement("iframe");
+        f.style.display = "none";
+        f.src = document.getElementById("openBtn").href;
+        document.body.appendChild(f);
+        setTimeout(function() { window.close(); }, 10000);
+      }
+    </script>
   </body>
 </html>`;
                 };
@@ -343,11 +357,11 @@ async function startLoopbackCallbackServer({ host, port, callbackPath }) {
                             title: "Login failed",
                             heading: "Login failed",
                             variant: "error",
-                            body: `<p>${safeError}</p>${
+                            body: `<p>Something went wrong while signing in. Please try again from the Gia menu bar app.</p>${
                                 safeDesc
                                     ? `<pre>${safeDesc}</pre>`
-                                    : `<p>Go back to Gia and try again.</p>`
-                            }`,
+                                    : ""
+                            }<p style="margin-top:16px;font-size:14px;color:var(--muted)">If this keeps happening, reach out to <a href="mailto:support@myagiea.com" style="color:var(--error)">support@myagiea.com</a></p>`,
                         }),
                     );
                 } else {

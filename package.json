@@ -37,7 +37,7 @@
         "@electron/fuses": "^1.8.0",
         "@vercel/webpack-asset-relocator-loader": "^1.7.3",
         "css-loader": "^6.11.0",
-        "electron": "36.0.1",
+        "electron": "41.0.4",
         "node-loader": "^2.1.0",
         "style-loader": "^3.3.4"
     },
@@ -48,9 +48,9 @@
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.40.1",
-        "@recallai/desktop-sdk": "2.0.5",
+        "@recallai/desktop-sdk": "2.0.8",
         "@timfish/forge-externals-plugin": "^0.2.1",
-        "axios": "^1.9.0",
+        "axios": "^1.13.6",
         "codemirror": "^6.0.1",
         "concurrently": "^9.2.1",
         "dotenv": "^16.6.1",

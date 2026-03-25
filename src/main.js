@@ -643,6 +643,17 @@ function getTrayIconPath() {
 function refreshTrayMenu() {
     if (!tray) return;
     tray.setContextMenu(buildTrayMenu());
+
+    // Show logged-out indicator in menu bar (unless recording state takes priority)
+    if (process.platform === "darwin" && !isRecording) {
+        const loggedOut = !api.authToken;
+        tray.setTitle(loggedOut ? "⚠" : "");
+        tray.setToolTip(
+            loggedOut
+                ? `${app.getName()} - Logged out`
+                : `${app.getName()} - Idle`,
+        );
+    }
 }
 
 async function showUploadTokenErrorDialog(error) {
@@ -989,11 +1000,30 @@ async function ensureAccessToken({ interactive = false, loginOpts = {} } = {}) {
     // Prevent multiple auth popups at once
     if (!loginInFlight) {
         loginInFlight = (async () => {
+            // Try silent auth first (reuses existing browser session)
+            try {
+                logger.info("[auth] attempting silent login (prompt=none)");
+                await login({ ...loginOpts, prompt: "none" });
+                const silent = await getStoredAccessToken({
+                    allowRefresh: true,
+                });
+                if (silent?.access_token) {
+                    logger.info("[auth] silent login succeeded");
+                    api.setAuthToken(silent.access_token);
+                    await syncUserIdFromProfile();
+                    sendDesktopSdkDiagnosticsIfNeeded();
+                    refreshTrayMenu();
+                    return silent.access_token;
+                }
+            } catch (e) {
+                logger.info("[auth] silent login failed, falling back to interactive:", e.message);
+            }
             await login(loginOpts);
             const after = await getStoredAccessToken({ allowRefresh: true });
             api.setAuthToken(after?.access_token || null);
             await syncUserIdFromProfile();
             sendDesktopSdkDiagnosticsIfNeeded();
+            refreshTrayMenu();
             return after?.access_token || null;
         })().finally(() => {
             loginInFlight = null;
@@ -1182,7 +1212,7 @@ function showOnboardingPopup({ view = "login" } = {}) {
 
     onboardingWindow = new BrowserWindow({
         width: 440,
-        height: view === "ready" ? 480 : view === "permissions" ? 520 : 340,
+        height: view === "ready" ? 480 : view === "permissions" ? 570 : 340,
         resizable: false,
         minimizable: true,
         maximizable: false,
@@ -1555,6 +1585,19 @@ function ensureSdkInitialized() {
 }
 
 async function setupOnboardingIpc() {
+    ipcMain.handle("onboarding:open-settings", async (_event, permission) => {
+        const urls = {
+            microphone:
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+            accessibility:
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+            screen:
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        };
+        const url = urls[permission];
+        if (url) shell.openExternal(url);
+    });
+
     ipcMain.handle("onboarding:close", async () => {
         closeOnboardingPopup();
     });
@@ -1687,9 +1730,9 @@ async function setupOnboardingIpc() {
     ipcMain.handle("onboarding:complete", async () => {
         logger.info("[onboarding] onboarding complete (no relaunch)");
 
-        // Mark onboarding complete WITHOUT forcing a relaunch flow.
-        // (We show the ready screen immediately in the existing window.)
-        writeOnboardingState({ completed: true, showReady: false });
+        // Mark onboarding complete. Set showReady so the ready screen
+        // appears after restart (screen recording permission may force a restart).
+        writeOnboardingState({ completed: true, showReady: true });
 
         // Ensure auth/diagnostics are in sync now that onboarding is done.
         try {
@@ -2098,22 +2141,8 @@ async function performLogout() {
     // Refresh tray to reflect logged-out state (hides Logout item)
     refreshTrayMenu();
 
-    logger.info("[logout] tokens cleared, starting interactive login");
-
-    // Immediately prompt re-login via Auth0 browser flow
-    try {
-        await ensureAccessToken({ interactive: true });
-        logger.info("[logout] re-login complete");
-        refreshTrayMenu();
-
-        // If a meeting was detected while logged out, show the popup now
-        if (currentMeetingInfo && !isRecording && cachedBotlessEnabled) {
-            logger.info("[logout] showing deferred meeting popup after re-login");
-            showMeetingPopup();
-        }
-    } catch (e) {
-        logger.warn("[logout] re-login failed (user can retry from tray):", e);
-    }
+    logger.info("[logout] tokens cleared, showing login popup");
+    showOnboardingPopup({ view: "login" });
 }
 
 async function setupMeetingPopupIpc() {
@@ -2612,14 +2641,28 @@ async function bootstrap() {
 
     // If onboarding is complete and we need to show the ready screen (just restarted after permissions)
     if (onboardingComplete && showReady) {
-        logger.info("[onboarding] showing ready screen after restart");
-        showOnboardingPopup({ view: "ready" });
-
         // Still sync auth state
         const auth = await isAuthenticated();
         api.setAuthToken(auth.accessToken);
         await syncUserIdFromProfile();
         sendDesktopSdkDiagnosticsIfNeeded();
+
+        // Check if all permissions are actually granted before showing ready
+        const perms = readPermissionStates();
+        const allGranted =
+            perms.microphone === "granted" &&
+            perms.accessibility === true &&
+            perms.screenCapture === "granted";
+        if (!allGranted) {
+            logger.info(
+                "[onboarding] missing permissions after restart, showing permissions instead of ready",
+                perms,
+            );
+            showOnboardingPopup({ view: "permissions" });
+        } else {
+            logger.info("[onboarding] showing ready screen after restart");
+            showOnboardingPopup({ view: "ready" });
+        }
         return;
     }
 
@@ -2636,6 +2679,21 @@ async function bootstrap() {
         if (!auth.authenticated) {
             logger.info("[auth] not authenticated, showing login popup");
             showOnboardingPopup({ view: "login" });
+            return;
+        }
+
+        // If any permission is missing, reopen permissions popup
+        const perms = readPermissionStates();
+        const allGranted =
+            perms.microphone === "granted" &&
+            perms.accessibility === true &&
+            perms.screenCapture === "granted";
+        if (!allGranted) {
+            logger.info(
+                "[onboarding] missing permissions after restart, reopening permissions popup",
+                perms,
+            );
+            showOnboardingPopup({ view: "permissions" });
         }
         return;
     }

@@ -254,6 +254,23 @@
                 font-weight: 500;
             }
 
+            .open-settings-link {
+                display: none;
+                font-size: 13px;
+                color: hsl(211, 100%, 50%);
+                cursor: pointer;
+                margin-top: 6px;
+                text-decoration: underline;
+            }
+
+            .open-settings-link:hover {
+                color: hsl(211, 100%, 40%);
+            }
+
+            .step.active .open-settings-link {
+                display: block;
+            }
+
             .checkmark {
                 width: 16px;
                 height: 16px;
@@ -327,7 +344,8 @@
             <div class="view active" id="loginView">
                 <img class="gia-logo" id="giaLogo" alt="Gia" />
                 <h1>Welcome to Gia</h1>
-                <p class="subtitle">Your AI meeting assistant. Sign in to get started with automatic meeting recording and transcription.</p>
+                <p class="subtitle">Your AI meeting assistant. <br> Sign in to get started with automatic meeting
+                                                                     recording and transcription.</p>
                 <button class="btn btn-primary" id="loginBtn">
                     Sign in with Gia
                 </button>
@@ -344,30 +362,33 @@
                         <div class="step-content">
                             <div class="step-title">Microphone Access</div>
                             <div class="step-description">To capture audio from your meetings</div>
+                            <div class="open-settings-link" data-permission="microphone">Open in System Settings &rsaquo;</div>
                         </div>
                         <div class="step-status"></div>
                     </div>
-                    
+
                     <div class="step pending" id="step-accessibility" data-step="accessibility">
                         <div class="step-number">2</div>
                         <div class="step-content">
                             <div class="step-title">Accessibility</div>
                             <div class="step-description">To detect when meetings start</div>
+                            <div class="open-settings-link" data-permission="accessibility">Open in System Settings &rsaquo;</div>
                         </div>
                         <div class="step-status"></div>
                     </div>
-                    
+
                     <div class="step pending" id="step-screen" data-step="screen">
                         <div class="step-number">3</div>
                         <div class="step-content">
                             <div class="step-title">Screen Recording</div>
                             <div class="step-description">To capture meeting content</div>
+                            <div class="open-settings-link" data-permission="screen">Open in System Settings &rsaquo;</div>
                         </div>
                         <div class="step-status"></div>
                     </div>
                 </div>
 
-                <button class="btn btn-primary" id="permissionBtn">
+                <button class="btn btn-primary" id="permissionBtn" style="margin-bottom: 24px;">
                     Grant Microphone Access
                 </button>
             </div>
@@ -393,7 +414,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
-                        <span>Gia runs in your menu bar — click the icon to access settings</span>
+                        <span>Gia runs in your menu bar, click the icon to access settings</span>
                     </li>
                     <li>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -512,10 +533,23 @@
                 updatePermissionButton();
             }
 
+            // Auto-advance past already-granted permissions
+            async function autoCheckGrantedPermissions() {
+                while (currentStepIndex < permissionSteps.length) {
+                    const step = permissionSteps[currentStepIndex];
+                    const result = await ipcRenderer.invoke('onboarding:check-permission', step);
+                    if (result.granted) {
+                        handlePermissionGranted(step);
+                    } else {
+                        break;
+                    }
+                }
+            }
+
             // Window size constants
             const VIEW_SIZES = {
                 login: { width: 440, height: 340 },
-                permissions: { width: 440, height: 520 },
+                permissions: { width: 440, height: 570 },
                 ready: { width: 440, height: 480 }
             };
 
@@ -532,6 +566,7 @@
                         await ipcRenderer.invoke('onboarding:resize', VIEW_SIZES.permissions);
                         showView('permissionsView');
                         initPermissionsView();
+                        await autoCheckGrantedPermissions();
                     } else {
                         console.error('Login failed:', result.error);
                         loginBtn.disabled = false;
@@ -585,6 +620,15 @@
                     updatePermissionButton();
                 }
             }
+
+            // Open System Settings links
+            document.querySelectorAll('.open-settings-link').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const permission = link.dataset.permission;
+                    ipcRenderer.invoke('onboarding:open-settings', permission);
+                });
+            });
 
             // Permission button
             permissionBtn.addEventListener('click', async () => {
@@ -658,6 +702,7 @@
                         if (payload.permissions.screen) currentStepIndex = 3;
                     }
                     initPermissionsView();
+                    await autoCheckGrantedPermissions();
                 } else {
                     showView('loginView');
                 }
