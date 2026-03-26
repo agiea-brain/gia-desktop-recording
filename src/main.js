@@ -20,6 +20,16 @@ import { loadEnv } from './utils/load-env';
 
 loadEnv();
 
+// Windows: handle Squirrel install/update/uninstall lifecycle events.
+// Must run before any app logic — Squirrel expects the process to quit immediately.
+if (process.platform === 'win32') {
+    try {
+        if (require('electron-squirrel-startup')) app.quit();
+    } catch {
+        // Not running under Squirrel (dev mode)
+    }
+}
+
 const DEEPLINK_SCHEME = process.env.GIA_DEEPLINK_SCHEME || 'gia';
 
 logger.configure({
@@ -35,7 +45,7 @@ logger.info('[logging] remote configured:', logger.isRemoteLoggingConfigured?.()
 
 function setupAutoUpdates() {
     if (!app.isPackaged) return;
-    if (process.platform !== 'darwin') return;
+    if (process.platform !== 'darwin' && process.platform !== 'win32') return;
 
     import('update-electron-app')
         .then(({ updateElectronApp, UpdateSourceType }) => {
@@ -373,6 +383,15 @@ function stopProfileRefreshTimer() {
 }
 
 function readPermissionStates() {
+    // Windows: Recall SDK handles permissions internally, no OS-level prompts needed.
+    if (process.platform === 'win32') {
+        return {
+            accessibility: true,
+            microphone: 'granted',
+            screenCapture: 'granted',
+        };
+    }
+
     // We currently request: accessibility, microphone, screen-capture
     const platform = process.platform;
 
@@ -1553,6 +1572,16 @@ function ensureSdkInitialized() {
 
 async function setupOnboardingIpc() {
     ipcMain.handle('onboarding:open-settings', async (_event, permission) => {
+        // Windows privacy settings (rarely reached — permissions auto-grant on Windows)
+        if (process.platform === 'win32') {
+            const winUrls = {
+                microphone: 'ms-settings:privacy-microphone',
+                screen: 'ms-settings:privacy-screenrecording',
+            };
+            const url = winUrls[permission];
+            if (url) shell.openExternal(url);
+            return;
+        }
         const urls = {
             microphone:
                 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
@@ -2206,6 +2235,27 @@ async function setupAuthIpc() {
     });
 
     ipcMain.handle('auth:getUserFirstName', () => cachedUserFirstName);
+}
+
+// Single instance lock — prevents duplicate instances and enables Windows deep links.
+// On Windows, protocol URLs arrive as argv in the second-instance event.
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', (_event, argv) => {
+        if (process.platform === 'win32') {
+            const deepLinkUrl = argv.find((arg) => arg.startsWith(`${DEEPLINK_SCHEME}://`));
+            if (deepLinkUrl) {
+                handleDeepLinkUrl(deepLinkUrl, 'second-instance');
+                return;
+            }
+        }
+        // Bring existing window to front
+        if (bringWindowToFront(onboardingWindow, 'second-instance')) return;
+        if (bringWindowToFront(meetingPopupWindow, 'second-instance')) return;
+        app.focus?.({ steal: true });
+    });
 }
 
 async function bootstrap() {

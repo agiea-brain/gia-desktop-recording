@@ -429,6 +429,20 @@
                 margin-top: 7px;
             }
 
+            .learn-more-link {
+                display: block;
+                text-align: center;
+                font-size: 13px;
+                color: var(--muted);
+                cursor: pointer;
+                margin-top: 4px;
+                text-decoration: none;
+            }
+            .learn-more-link:hover {
+                color: var(--foreground);
+                text-decoration: underline;
+            }
+
             .login-message {
                 display: none;
                 width: 100%;
@@ -574,6 +588,7 @@
                             <div class="step-status"></div>
                         </div>
                     </div>
+                    <a class="learn-more-link" id="learnMorePermissions">Learn more about permissions</a>
                 </div>
                 <button class="btn" id="permissionBtn">Grant microphone access</button>
             </div>
@@ -684,6 +699,11 @@
             });
             minimizeBtn.addEventListener('click', () => {
                 ipcRenderer.invoke('onboarding:minimize');
+            });
+
+            // Learn more about permissions
+            document.getElementById('learnMorePermissions').addEventListener('click', () => {
+                require('electron').shell.openExternal('https://platform.myagiea.com/account-settings/join-call?section=mac-permissions');
             });
 
             // Show specific view
