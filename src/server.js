@@ -1,40 +1,33 @@
-const express = require("express");
-const axios = require("axios");
-const util = require("util");
+const express = require('express');
+const axios = require('axios');
+const util = require('util');
 const app = express();
 
-require("dotenv").config();
+require('dotenv').config();
 
 // Best-effort remote logging (no SDK tokens needed).
 const LOGGING_API_URL =
-    "https://r0ng0htend.execute-api.us-east-2.amazonaws.com/stage/desktop-sdk-logger";
-const TRACE_FLAGS = "01";
+    'https://r0ng0htend.execute-api.us-east-2.amazonaws.com/stage/desktop-sdk-logger';
+const TRACE_FLAGS = '01';
 let currentTraceparent = null;
 let traceStartInFlight = null;
 let bufferedRemotePayloads = [];
 const MAX_BUFFERED_REMOTE_PAYLOADS = 100;
 
 function toApiLevel(level) {
-    if (level === "error") return "error";
-    if (level === "warn" || level === "warning") return "warning";
-    return "info";
+    if (level === 'error') return 'error';
+    if (level === 'warn' || level === 'warning') return 'warning';
+    return 'info';
 }
 
 function isHex(str, len) {
-    return (
-        typeof str === "string" &&
-        str.length === len &&
-        /^[0-9a-f]+$/i.test(str)
-    );
+    return typeof str === 'string' && str.length === len && /^[0-9a-f]+$/i.test(str);
 }
 
 function buildTraceparent(traceId, spanId, flags) {
     if (!isHex(traceId, 32)) return null;
     if (!isHex(spanId, 16)) return null;
-    const fl =
-        typeof flags === "string" && /^[0-9a-f]{2}$/i.test(flags)
-            ? flags
-            : "01";
+    const fl = typeof flags === 'string' && /^[0-9a-f]{2}$/i.test(flags) ? flags : '01';
     return `00-${traceId.toLowerCase()}-${spanId.toLowerCase()}-${fl.toLowerCase()}`;
 }
 
@@ -62,7 +55,7 @@ function postToLoggingApi(level, message, properties = {}) {
                   properties,
               };
 
-        const headers = { "content-type": "application/json" };
+        const headers = { 'content-type': 'application/json' };
         if (!shouldStartTraceNow && currentTraceparent) {
             headers.traceparent = currentTraceparent;
         }
@@ -76,10 +69,8 @@ function postToLoggingApi(level, message, properties = {}) {
             traceStartInFlight = Promise.resolve(req)
                 .then((res) => {
                     const data = res?.data || null;
-                    const traceId =
-                        typeof data?.trace_id === "string" ? data.trace_id : null;
-                    const spanId =
-                        typeof data?.span_id === "string" ? data.span_id : null;
+                    const traceId = typeof data?.trace_id === 'string' ? data.trace_id : null;
+                    const spanId = typeof data?.span_id === 'string' ? data.span_id : null;
                     const tp = buildTraceparent(traceId, spanId, TRACE_FLAGS);
                     if (tp) currentTraceparent = tp;
                 })
@@ -102,10 +93,10 @@ function postToLoggingApi(level, message, properties = {}) {
                                     timeout: 2500,
                                     headers: tp
                                         ? {
-                                              "content-type": "application/json",
+                                              'content-type': 'application/json',
                                               traceparent: tp,
                                           }
-                                        : { "content-type": "application/json" },
+                                        : { 'content-type': 'application/json' },
                                 },
                             )
                             .catch(() => {});
@@ -113,10 +104,9 @@ function postToLoggingApi(level, message, properties = {}) {
                 });
         }
 
-        req
-            .catch(() => {
-                // ignore
-            });
+        req.catch(() => {
+            // ignore
+        });
     } catch {
         // ignore
     }
@@ -125,37 +115,33 @@ function postToLoggingApi(level, message, properties = {}) {
 function log(level, ...args) {
     const msg = util.format(...args);
     postToLoggingApi(level, msg, {
-        process: "server",
-        service: "gia-server",
+        process: 'server',
+        service: 'gia-server',
         userId: null,
         user_id: null,
     });
 
     // Fallback to stdout/stderr without using console.
-    const stream = level === "error" ? process.stderr : process.stdout;
+    const stream = level === 'error' ? process.stderr : process.stdout;
     try {
-        stream.write(msg + "\n");
+        stream.write(msg + '\n');
     } catch {
         // ignore
     }
 }
 
 // API configuration for Recall.ai
-const RECALLAI_API_URL =
-    process.env.RECALLAI_API_URL || "https://api.recall.ai";
+const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
 const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
 
-app.get("/start-recording", async (req, res) => {
-    log(
-        "info",
-        `Creating upload token with API key: ${RECALLAI_API_KEY.slice(0, 4)}...`,
-    );
+app.get('/start-recording', async (req, res) => {
+    log('info', `Creating upload token with API key: ${RECALLAI_API_KEY.slice(0, 4)}...`);
 
     if (!RECALLAI_API_KEY) {
-        log("error", "RECALLAI_API_KEY is missing! Set it in .env file");
+        log('error', 'RECALLAI_API_KEY is missing! Set it in .env file');
         return res.json({
-            status: "error",
-            message: "RECALLAI_API_KEY is missing",
+            status: 'error',
+            message: 'RECALLAI_API_KEY is missing',
         });
     }
 
@@ -173,12 +159,12 @@ app.get("/start-recording", async (req, res) => {
                     },
                     realtime_endpoints: [
                         {
-                            type: "desktop_sdk_callback",
+                            type: 'desktop_sdk_callback',
                             events: [
-                                "participant_events.join",
-                                "video_separate_png.data",
-                                "transcript.data",
-                                "transcript.provider_data",
+                                'participant_events.join',
+                                'video_separate_png.data',
+                                'transcript.data',
+                                'transcript.provider_data',
                             ],
                         },
                     ],
@@ -191,22 +177,22 @@ app.get("/start-recording", async (req, res) => {
         );
 
         res.json({
-            status: "success",
+            status: 'success',
             upload_token: response.data.upload_token,
         });
     } catch (e) {
         log(
-            "error",
-            "Error creating upload token:",
+            'error',
+            'Error creating upload token:',
             JSON.stringify(e.errors || e.response?.data || e.message),
         );
-        res.json({ status: "error", message: e.message });
+        res.json({ status: 'error', message: e.message });
     }
 });
 
 if (require.main === module) {
     app.listen(13373, () => {
-        log("info", `Server listening on http://localhost:13373`);
+        log('info', `Server listening on http://localhost:13373`);
     });
 }
 

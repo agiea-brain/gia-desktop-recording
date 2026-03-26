@@ -10,11 +10,7 @@
         <div class="app-container">
             <header class="header" id="drag-region">
                 <div class="header-left">
-                    <button
-                        class="btn back-btn"
-                        id="backButton"
-                        style="display: none"
-                    >
+                    <button class="btn back-btn" id="backButton" style="display: none">
                         <svg
                             width="16"
                             height="16"
@@ -45,25 +41,15 @@
                                 />
                             </svg>
                         </span>
-                        <input
-                            type="text"
-                            class="search-input"
-                            placeholder="Search notes"
-                        />
+                        <input type="text" class="search-input" placeholder="Search notes" />
                     </div>
                 </div>
                 <div class="header-right">
                     <button class="btn new-note-btn" id="newNoteBtn">
                         Record In-person Meeting
                     </button>
-                    <button class="btn join-meeting-btn" id="joinMeetingBtn">
-                        Record Meeting
-                    </button>
-                    <button
-                        id="toggleSidebar"
-                        class="btn toggle-sidebar-btn"
-                        style="display: none"
-                    >
+                    <button class="btn join-meeting-btn" id="joinMeetingBtn">Record Meeting</button>
+                    <button id="toggleSidebar" class="btn toggle-sidebar-btn" style="display: none">
                         <svg
                             width="16"
                             height="16"
@@ -85,12 +71,7 @@
                             fill="none"
                             xmlns="http://www.w3.org/2000/svg"
                         >
-                            <rect
-                                width="40"
-                                height="40"
-                                rx="20"
-                                fill="#f0f0f0"
-                            />
+                            <rect width="40" height="40" rx="20" fill="#f0f0f0" />
                             <path
                                 d="M20 20C22.7614 20 25 17.7614 25 15C25 12.2386 22.7614 10 20 10C17.2386 10 15 12.2386 15 15C15 17.7614 17.2386 20 20 20Z"
                                 fill="#a0a0a0"
@@ -126,9 +107,7 @@
                     <main class="editor-content">
                         <div class="note-header">
                             <div class="title-container">
-                                <h1 id="noteTitle" contenteditable="true">
-                                    Paint shopping plan
-                                </h1>
+                                <h1 id="noteTitle" contenteditable="true">Paint shopping plan</h1>
                                 <div class="edit-icon">
                                     <svg
                                         width="14"
@@ -168,12 +147,7 @@
                                         fill="none"
                                         xmlns="http://www.w3.org/2000/svg"
                                     >
-                                        <rect
-                                            width="40"
-                                            height="40"
-                                            rx="20"
-                                            fill="#f0f0f0"
-                                        />
+                                        <rect width="40" height="40" rx="20" fill="#f0f0f0" />
                                         <path
                                             d="M20 20C22.7614 20 25 17.7614 25 15C25 12.2386 22.7614 10 20 10C17.2386 10 15 12.2386 15 15C15 17.7614 17.2386 20 20 20Z"
                                             fill="#a0a0a0"
@@ -279,15 +253,9 @@ Chat with meeting transcript: https://notes.granola.ai/d/393a95cf-4788-4a47-9deb
                             <section class="sidebar-section">
                                 <h3>ASK MUESLI</h3>
                                 <div class="ai-options">
-                                    <button class="ai-btn">
-                                        Generate meeting summary
-                                    </button>
-                                    <button class="ai-btn">
-                                        List action items
-                                    </button>
-                                    <button class="ai-btn">
-                                        Write follow-up email
-                                    </button>
+                                    <button class="ai-btn">Generate meeting summary</button>
+                                    <button class="ai-btn">List action items</button>
+                                    <button class="ai-btn">Write follow-up email</button>
                                     <button class="ai-btn">List Q&A</button>
                                 </div>
                             </section>
@@ -297,10 +265,7 @@ Chat with meeting transcript: https://notes.granola.ai/d/393a95cf-4788-4a47-9deb
 
                 <div class="floating-controls">
                     <div class="control-buttons">
-                        <button
-                            class="control-btn record-btn"
-                            id="recordButton"
-                        >
+                        <button class="control-btn record-btn" id="recordButton">
                             <svg
                                 width="18"
                                 height="18"
@@ -409,12 +374,7 @@ Chat with meeting transcript: https://notes.granola.ai/d/393a95cf-4788-4a47-9deb
                 <div class="debug-section" id="loggerSection">
                     <div class="debug-section-header">
                         <h4>RecallAI SDK Logger</h4>
-                        <button
-                            class="debug-section-action"
-                            id="clearLoggerBtn"
-                        >
-                            Clear
-                        </button>
+                        <button class="debug-section-action" id="clearLoggerBtn">Clear</button>
                     </div>
                     <div class="debug-section-content" id="sdkLoggerContent">
                         <!-- Log entries will be added here dynamically -->
@@ -428,10 +388,7 @@ Chat with meeting transcript: https://notes.granola.ai/d/393a95cf-4788-4a47-9deb
                     </div>
                     <div class="debug-section-content" id="transcriptContent">
                         <div class="placeholder-content">
-                            <p>
-                                Live transcript will appear here during
-                                recording
-                            </p>
+                            <p>Live transcript will appear here during recording</p>
                         </div>
                     </div>
                 </div>

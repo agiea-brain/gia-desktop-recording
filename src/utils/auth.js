@@ -1,9 +1,9 @@
-import { app, shell } from "electron";
-import http from "http";
-import crypto from "crypto";
-import fs from "fs/promises";
-import path from "path";
-import { loadEnv } from "./load-env";
+import { app, shell } from 'electron';
+import http from 'http';
+import crypto from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
+import { loadEnv } from './load-env';
 
 /**
  * Auth0 OAuth (Authorization Code + PKCE) helper for Electron main-process.
@@ -17,50 +17,44 @@ import { loadEnv } from "./load-env";
 loadEnv();
 
 function ensureRequiredScopes(scopes) {
-    const parts = String(scopes || "")
+    const parts = String(scopes || '')
         .split(/\s+/)
         .filter(Boolean);
-    if (!parts.includes("offline_access")) parts.push("offline_access");
-    return parts.join(" ");
+    if (!parts.includes('offline_access')) parts.push('offline_access');
+    return parts.join(' ');
 }
 
 const DEFAULTS = {
-    domain: process.env.AUTH0_DOMAIN || "auth.myagiea.com",
-    clientId: process.env.AUTH0_CLIENT_ID || "0E4ov2yLLLONevskQiqYzbRotpGdmX4q",
-    audience: process.env.AUTH0_AUDIENCE || "https://api.heygia.com",
-    scopes: ensureRequiredScopes(
-        process.env.AUTH0_SCOPES || "openid profile email",
-    ),
-    redirectHost: process.env.AUTH0_REDIRECT_HOST || "127.0.0.1",
+    domain: process.env.AUTH0_DOMAIN || 'auth.myagiea.com',
+    clientId: process.env.AUTH0_CLIENT_ID || '0E4ov2yLLLONevskQiqYzbRotpGdmX4q',
+    audience: process.env.AUTH0_AUDIENCE || 'https://api.heygia.com',
+    scopes: ensureRequiredScopes(process.env.AUTH0_SCOPES || 'openid profile email'),
+    redirectHost: process.env.AUTH0_REDIRECT_HOST || '127.0.0.1',
     redirectPort: Number(process.env.AUTH0_REDIRECT_PORT || 47823),
-    redirectPath: process.env.AUTH0_REDIRECT_PATH || "/callback",
+    redirectPath: process.env.AUTH0_REDIRECT_PATH || '/callback',
 };
 
-const DEEPLINK_SCHEME = process.env.GIA_DEEPLINK_SCHEME || "gia";
+const DEEPLINK_SCHEME = process.env.GIA_DEEPLINK_SCHEME || 'gia';
 
 const STORAGE_FILE_ENV = process.env.GIA_AUTH_STORAGE_FILE;
 
 function getStorageFile() {
-    return (
-        STORAGE_FILE_ENV ||
-        path.join(app.getPath("userData"), "auth.tokens.json")
-    );
+    return STORAGE_FILE_ENV || path.join(app.getPath('userData'), 'auth.tokens.json');
 }
 
 function base64url(buf) {
     return Buffer.from(buf)
-        .toString("base64")
-        .replace(/\+/g, "-")
-        .replace(/\//g, "_")
-        .replace(/=+$/g, "");
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
 }
 
 function randomString(length = 64) {
     // Allowed PKCE charset: ALPHA / DIGIT / "-" / "." / "_" / "~"
-    const chars =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
     const bytes = crypto.randomBytes(length);
-    let out = "";
+    let out = '';
     for (let i = 0; i < length; i++) out += chars[bytes[i] % chars.length];
     return out;
 }
@@ -71,7 +65,7 @@ function buildRedirectUri(cfg = DEFAULTS) {
 
 async function readStoredTokens() {
     try {
-        const raw = await fs.readFile(getStorageFile(), "utf8");
+        const raw = await fs.readFile(getStorageFile(), 'utf8');
         return JSON.parse(raw);
     } catch {
         return null;
@@ -83,7 +77,7 @@ async function writeStoredTokens(tokens) {
     await fs.mkdir(path.dirname(storageFile), { recursive: true });
     const tmp = `${storageFile}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(tokens, null, 2), {
-        encoding: "utf8",
+        encoding: 'utf8',
         mode: 0o600,
     });
     await fs.rename(tmp, storageFile);
@@ -100,15 +94,13 @@ async function clearStoredTokens() {
 function normalizeTokens(tokenResponse) {
     const now = Date.now();
     const expiresInSec =
-        typeof tokenResponse.expires_in === "number"
-            ? tokenResponse.expires_in
-            : 0;
+        typeof tokenResponse.expires_in === 'number' ? tokenResponse.expires_in : 0;
     const expiresAt = now + expiresInSec * 1000;
 
     return {
         access_token: tokenResponse.access_token,
         refresh_token: tokenResponse.refresh_token,
-        token_type: tokenResponse.token_type || "Bearer",
+        token_type: tokenResponse.token_type || 'Bearer',
         scope: tokenResponse.scope,
         expires_in: expiresInSec,
         expires_at: expiresAt,
@@ -118,47 +110,37 @@ function normalizeTokens(tokenResponse) {
 
 async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs = 300000 }) {
     return await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-            try { server.close(); } catch {}
-            reject(new Error("Login callback timed out"));
-        }, timeoutMs);
         const server = http.createServer((req, res) => {
             try {
-                const url = new URL(req.url || "", `http://${host}:${port}`);
+                const url = new URL(req.url || '', `http://${host}:${port}`);
                 if (url.pathname !== callbackPath) {
                     res.writeHead(404);
-                    res.end("Not found");
+                    res.end('Not found');
                     return;
                 }
 
                 // Auth0 redirects with code/state or error/error_description
-                const code = url.searchParams.get("code");
-                const state = url.searchParams.get("state");
-                const error = url.searchParams.get("error");
-                const errorDescription =
-                    url.searchParams.get("error_description");
+                const code = url.searchParams.get('code');
+                const state = url.searchParams.get('state');
+                const error = url.searchParams.get('error');
+                const errorDescription = url.searchParams.get('error_description');
 
                 res.writeHead(200, {
-                    "Content-Type": "text/html; charset=utf-8",
-                    "Cache-Control": "no-store, no-cache",
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Cache-Control': 'no-store, no-cache',
                 });
 
                 const escapeHtml = (s) =>
-                    String(s ?? "")
-                        .replace(/&/g, "&amp;")
-                        .replace(/</g, "&lt;")
-                        .replace(/>/g, "&gt;")
-                        .replace(/"/g, "&quot;")
-                        .replace(/'/g, "&#39;");
+                    String(s ?? '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
 
                 const openAppUrl = `${DEEPLINK_SCHEME}://open`;
 
-                const page = ({
-                    title,
-                    heading,
-                    body,
-                    variant = "success",
-                }) => {
+                const page = ({ title, heading, body, variant = 'success' }) => {
                     const safeTitle = escapeHtml(title);
                     const safeHeading = escapeHtml(heading);
                     return `<!doctype html>
@@ -318,7 +300,7 @@ async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs
       <div class="card">
         <div class="status-icon ${variant}">
           ${
-              variant === "success"
+              variant === 'success'
                   ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
                   : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
           }
@@ -355,25 +337,23 @@ async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs
 
                 if (error) {
                     const safeError = escapeHtml(error);
-                    const safeDesc = escapeHtml(errorDescription || "");
+                    const safeDesc = escapeHtml(errorDescription || '');
                     res.end(
                         page({
-                            title: "Login failed",
-                            heading: "Login failed",
-                            variant: "error",
+                            title: 'Login failed',
+                            heading: 'Login failed',
+                            variant: 'error',
                             body: `<p>Something went wrong while signing in. Please try again from the Gia menu bar app.</p>${
-                                safeDesc
-                                    ? `<pre>${safeDesc}</pre>`
-                                    : ""
+                                safeDesc ? `<pre>${safeDesc}</pre>` : ''
                             }<p style="margin-top:16px;font-size:14px;color:var(--muted)">If this keeps happening, reach out to <a href="mailto:support@myagiea.com" style="color:var(--error)">support@myagiea.com</a></p>`,
                         }),
                     );
                 } else {
                     res.end(
                         page({
-                            title: "Login complete",
-                            heading: "Login complete",
-                            variant: "success",
+                            title: 'Login complete',
+                            heading: 'Login complete',
+                            variant: 'success',
                             body: `<p>You’re signed in. Return to Gia to continue setup.</p>`,
                         }),
                     );
@@ -396,23 +376,27 @@ async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs
             }
         });
 
-        server.on("error", reject);
+        const timeout = setTimeout(() => {
+            try {
+                server.close();
+            } catch {}
+            reject(new Error('Login callback timed out'));
+        }, timeoutMs);
+
+        server.on('error', (err) => {
+            clearTimeout(timeout);
+            reject(err);
+        });
         server.listen(port, host);
     });
 }
 
-async function exchangeCodeForTokens({
-    domain,
-    clientId,
-    redirectUri,
-    codeVerifier,
-    code,
-}) {
+async function exchangeCodeForTokens({ domain, clientId, redirectUri, codeVerifier, code }) {
     const tokenRes = await fetch(`https://${domain}/oauth/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            grant_type: "authorization_code",
+            grant_type: 'authorization_code',
             client_id: clientId,
             code_verifier: codeVerifier,
             code,
@@ -427,10 +411,10 @@ async function exchangeCodeForTokens({
 
 async function refreshAccessToken({ domain, clientId, refreshToken }) {
     const tokenRes = await fetch(`https://${domain}/oauth/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            grant_type: "refresh_token",
+            grant_type: 'refresh_token',
             client_id: clientId,
             refresh_token: refreshToken,
         }),
@@ -497,7 +481,7 @@ export async function login({
     clientId = DEFAULTS.clientId,
     audience = DEFAULTS.audience,
     scopes = DEFAULTS.scopes,
-    prompt = "login", // "none" for silent attempt
+    prompt = 'login', // "none" for silent attempt
 } = {}) {
     await app.whenReady();
     const requestedScopes = ensureRequiredScopes(scopes);
@@ -506,21 +490,19 @@ export async function login({
 
     const state = crypto.randomUUID();
     const codeVerifier = randomString(64);
-    const codeChallenge = base64url(
-        crypto.createHash("sha256").update(codeVerifier).digest(),
-    );
+    const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
 
     const authUrl =
         `https://${domain}/authorize?` +
         new URLSearchParams({
             client_id: clientId,
-            response_type: "code",
+            response_type: 'code',
             redirect_uri: redirectUri,
             audience,
             scope: requestedScopes,
             state,
             code_challenge: codeChallenge,
-            code_challenge_method: "S256",
+            code_challenge_method: 'S256',
             prompt,
         }).toString();
 
@@ -530,7 +512,7 @@ export async function login({
         host: DEFAULTS.redirectHost,
         port: DEFAULTS.redirectPort,
         callbackPath: DEFAULTS.redirectPath,
-        timeoutMs: prompt === "none" ? 15000 : 300000,
+        timeoutMs: prompt === 'none' ? 15000 : 300000,
     });
 
     // Open auth URL in the system default browser
@@ -542,16 +524,13 @@ export async function login({
     if (callback?.error) {
         throw new Error(
             `Auth error: ${callback.error}${
-                callback.errorDescription
-                    ? ` (${callback.errorDescription})`
-                    : ""
+                callback.errorDescription ? ` (${callback.errorDescription})` : ''
             }`,
         );
     }
 
-    if (!callback?.code) throw new Error("No authorization code returned");
-    if (callback?.state && callback.state !== state)
-        throw new Error("Invalid OAuth state");
+    if (!callback?.code) throw new Error('No authorization code returned');
+    if (callback?.state && callback.state !== state) throw new Error('Invalid OAuth state');
 
     const tokenResponse = await exchangeCodeForTokens({
         domain,
