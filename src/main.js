@@ -392,7 +392,7 @@ function startProfileRefreshTimer() {
             stopProfileRefreshTimer();
             return;
         }
-        logger.info('[auth] periodic profile refresh');
+        logger.info('[auth] periodic profile refresh (every 5m, hits Gia backend only)');
         await syncUserIdFromProfile({ forceRefresh: true });
     }, PROFILE_REFRESH_INTERVAL_MS);
 }

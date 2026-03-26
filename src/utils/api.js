@@ -1,4 +1,4 @@
-import {loadEnv} from './load-env';
+import { loadEnv } from './load-env';
 import logger from './logger';
 
 // Ensure env is loaded even when cwd isn't repo root.
