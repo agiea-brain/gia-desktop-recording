@@ -10,7 +10,5 @@ module.exports = {
   module: {
     rules,
   },
-  entry: {
-    renderer: './src/renderer.js',
-  },
+  entry: {},
 };

@@ -628,10 +628,6 @@ function shouldShowReadyScreen() {
     return state.showReady === true;
 }
 
-function markOnboardingComplete() {
-    writeOnboardingState({ completed: true, showReady: true });
-}
-
 function clearShowReadyFlag() {
     const state = readOnboardingState();
     writeOnboardingState({ ...state, showReady: false });
@@ -772,13 +768,15 @@ async function startMeetingRecordingWithAuth({ source = 'unknown' } = {}) {
 }
 
 function buildTrayMenu() {
-    const status = !isRecording ? 'Idle' : isPaused ? 'Paused' : 'Recording';
+    const statusLabel = !isRecording
+        ? (cachedUserFirstName ? `Hi ${cachedUserFirstName}` : 'Idle')
+        : isPaused ? 'Paused' : 'Recording...';
     // Treat "Start Recording" as another way to accept the popup:
     // if a meeting is active and we're not already recording, allow manual start.
     const canManualStart = !!currentMeetingInfo && !isRecording && !userWantsToRecord;
     const template = [
         {
-            label: `Status: ${status}`,
+            label: statusLabel,
             enabled: false,
         },
         ...(canManualStart
@@ -864,6 +862,12 @@ function buildTrayMenu() {
             : []),
         ...(api.authToken
             ? [
+                  {
+                      label: 'Show Calls',
+                      click: () => {
+                          shell.openExternal('https://platform.myagiea.com/calls');
+                      },
+                  },
                   {
                       label: 'Logout',
                       click: async () => {
