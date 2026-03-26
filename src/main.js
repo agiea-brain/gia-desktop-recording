@@ -1408,7 +1408,8 @@ function ensureRecallRuntimeListenersRegistered() {
             };
 
             // Only show popup if logged in and botless recording is enabled.
-            if (!api.authToken) {
+            const { authenticated } = await isAuthenticated();
+            if (!authenticated) {
                 logger.info('[recall] meeting stored, waiting for login before showing popup');
             } else if (!cachedBotlessEnabled) {
                 logger.info('[recall] meeting ignored (botlessEnabled is false for this user)');
