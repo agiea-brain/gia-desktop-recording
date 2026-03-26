@@ -59,7 +59,7 @@ function setupAutoUpdates() {
                 },
             });
             const currentVersion = app.getVersion();
-            logger.info('[auto-update] curent versiorn:', currentVersion);
+            logger.info('[auto-update] current version:', currentVersion);
             logger.info('[auto-update] update-electron-app initialized');
         })
         .catch((err) => {
@@ -1194,6 +1194,7 @@ function showDebugControlsWindow({ focus = false } = {}) {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: true,
             preload: getPreloadPath('debug-controls-preload.js'),
         },
     });
@@ -1281,6 +1282,7 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: true,
             preload: getPreloadPath('onboarding-preload.js'),
         },
     });
@@ -1818,6 +1820,7 @@ function showMeetingPopup() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: true,
             preload: getPreloadPath('meeting-popup-preload.js'),
         },
     });

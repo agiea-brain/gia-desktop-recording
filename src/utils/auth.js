@@ -336,7 +336,6 @@ async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs
                 };
 
                 if (error) {
-                    const safeError = escapeHtml(error);
                     const safeDesc = escapeHtml(errorDescription || '');
                     res.end(
                         page({
@@ -402,6 +401,7 @@ async function exchangeCodeForTokens({ domain, clientId, redirectUri, codeVerifi
             code,
             redirect_uri: redirectUri,
         }),
+        signal: AbortSignal.timeout(30000),
     });
 
     const bodyText = await tokenRes.text();
@@ -418,6 +418,7 @@ async function refreshAccessToken({ domain, clientId, refreshToken }) {
             client_id: clientId,
             refresh_token: refreshToken,
         }),
+        signal: AbortSignal.timeout(30000),
     });
 
     const bodyText = await tokenRes.text();
