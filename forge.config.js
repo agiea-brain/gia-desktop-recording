@@ -2,7 +2,6 @@ const { FusesPlugin } = require("@electron-forge/plugin-fuses");
 const { FuseV1Options, FuseVersion } = require("@electron/fuses");
 
 const SHOULD_SIGN_MAC = process.env.GIA_MAC_SIGN === "1";
-const SHOULD_NOTARIZE_MAC = process.env.GIA_MAC_NOTARIZE === "1";
 const MAC_BUNDLE_ID =
     process.env.GIA_MAC_BUNDLE_ID || "com.gia.desktop-recording";
 

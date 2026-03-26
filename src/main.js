@@ -673,7 +673,7 @@ function refreshTrayMenu() {
     if (!tray) return;
     tray.setContextMenu(buildTrayMenu());
 
-    // Show logged-out indicator in menu bar (unless recording state takes priority)
+    // Show a logged-out indicator in the menu bar (unless the recording state takes priority)
     if (process.platform === 'darwin' && !isRecording) {
         const loggedOut = !api.authToken;
         tray.setTitle(loggedOut ? '⚠' : '');
