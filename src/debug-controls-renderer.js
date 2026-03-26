@@ -1,4 +1,4 @@
-const { ipcRenderer } = require('electron');
+const api = window.electronAPI;
 
 const statusEl = document.getElementById('status');
 const pauseBtn = document.getElementById('pauseBtn');
@@ -24,7 +24,7 @@ function render(next) {
 
 async function refresh() {
     try {
-        const next = await ipcRenderer.invoke('debug-controls:get-state');
+        const next = await api.getState();
         render(next);
     } catch {
         // ignore
@@ -34,7 +34,7 @@ async function refresh() {
 pauseBtn.addEventListener('click', async () => {
     pauseBtn.disabled = true;
     try {
-        await ipcRenderer.invoke('debug-controls:toggle-pause');
+        await api.togglePause();
     } finally {
         await refresh();
     }
@@ -43,14 +43,14 @@ pauseBtn.addEventListener('click', async () => {
 stopBtn.addEventListener('click', async () => {
     stopBtn.disabled = true;
     try {
-        await ipcRenderer.invoke('debug-controls:stop');
+        await api.stop();
     } finally {
         // main process will close the window; keep UI consistent while waiting
         await refresh();
     }
 });
 
-ipcRenderer.on('debug-controls:state', (_evt, next) => {
+api.onState((next) => {
     render(next);
 });
 

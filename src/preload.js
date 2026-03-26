@@ -40,17 +40,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
             }),
     },
     navigate: (page) => ipcRenderer.send('navigate', page),
-    saveMeetingsData: (data) => ipcRenderer.invoke('saveMeetingsData', data),
-    loadMeetingsData: () => ipcRenderer.invoke('loadMeetingsData'),
-    deleteMeeting: (meetingId) => ipcRenderer.invoke('deleteMeeting', meetingId),
-    generateMeetingSummary: (meetingId) => ipcRenderer.invoke('generateMeetingSummary', meetingId),
-    generateMeetingSummaryStreaming: (meetingId) =>
-        ipcRenderer.invoke('generateMeetingSummaryStreaming', meetingId),
-    startManualRecording: (meetingId) => ipcRenderer.invoke('startManualRecording', meetingId),
-    stopManualRecording: (recordingId) => ipcRenderer.invoke('stopManualRecording', recordingId),
-    debugGetHandlers: () => ipcRenderer.invoke('debugGetHandlers'),
-    checkForDetectedMeeting: () => ipcRenderer.invoke('checkForDetectedMeeting'),
-    joinDetectedMeeting: () => ipcRenderer.invoke('joinDetectedMeeting'),
     auth: {
         isAuthenticated: () => ipcRenderer.invoke('auth:isAuthenticated'),
         getAccessToken: () => ipcRenderer.invoke('auth:getAccessToken'),
@@ -76,5 +65,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('meeting-detection-status', (_, data) => callback(data)),
     onMeetingTitleUpdated: (callback) =>
         ipcRenderer.on('meeting-title-updated', (_, data) => callback(data)),
-    getActiveRecordingId: (noteId) => ipcRenderer.invoke('getActiveRecordingId', noteId),
 });

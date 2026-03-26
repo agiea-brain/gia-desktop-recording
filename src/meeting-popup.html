@@ -270,17 +270,10 @@
         </div>
 
         <script>
-            const { ipcRenderer } = require('electron');
+            const api = window.electronAPI;
 
             // Route popup logs through main-process Logfire.
             (() => {
-                const send = (level, ...args) =>
-                    ipcRenderer.send('app-log', {
-                        level,
-                        args,
-                        context: { source: 'meeting-popup' },
-                    });
-
                 const original = {
                     log: console.log?.bind(console),
                     info: console.info?.bind(console),
@@ -291,23 +284,23 @@
 
                 console.log = (...args) => {
                     original.log?.(...args);
-                    send('info', ...args);
+                    api.log('info', ...args);
                 };
                 console.info = (...args) => {
                     original.info?.(...args);
-                    send('info', ...args);
+                    api.log('info', ...args);
                 };
                 console.warn = (...args) => {
                     original.warn?.(...args);
-                    send('warn', ...args);
+                    api.log('warn', ...args);
                 };
                 console.error = (...args) => {
                     original.error?.(...args);
-                    send('error', ...args);
+                    api.log('error', ...args);
                 };
                 console.debug = (...args) => {
                     original.debug?.(...args);
-                    send('debug', ...args);
+                    api.log('debug', ...args);
                 };
             })();
 
@@ -326,7 +319,7 @@
 
             // Window controls
             minimizeBtn.addEventListener('click', () => {
-                ipcRenderer.invoke('meeting-popup:minimize');
+                api.minimize();
             });
 
             // Handle confirm button
@@ -338,7 +331,7 @@
                 confirmBtn.innerHTML = '<div class="spinner"></div>Starting...';
 
                 try {
-                    await ipcRenderer.invoke('meeting-popup:confirm-recording');
+                    await api.confirmRecording();
                 } catch (error) {
                     console.error('Error starting recording:', error);
                     confirmBtn.disabled = false;
@@ -350,7 +343,7 @@
             // Handle decline button
             declineBtn.addEventListener('click', async () => {
                 if (isRecording) return;
-                await ipcRenderer.invoke('meeting-popup:decline-recording');
+                await api.declineRecording();
             });
 
             // Handle end recording button
@@ -361,7 +354,7 @@
                 endBtn.innerHTML = '<div class="spinner"></div>Stopping...';
 
                 try {
-                    await ipcRenderer.invoke('meeting-popup:end-recording');
+                    await api.endRecording();
                 } catch (error) {
                     console.error('Error ending recording:', error);
                     endBtn.disabled = false;
@@ -370,7 +363,7 @@
             });
 
             // Listen for recording state changes
-            ipcRenderer.on('meeting-popup:recording-started', () => {
+            api.onRecordingStarted(() => {
                 isRecording = true;
                 titleEl.textContent = 'Recording';
                 messageEl.style.display = 'none';
@@ -382,7 +375,7 @@
             });
 
             // Receive the Gia logo from main (data URL), so it works in packaged builds.
-            ipcRenderer.on('meeting-popup:logo', (_event, payload) => {
+            api.onLogo((payload) => {
                 const dataUrl = payload?.dataUrl;
                 if (typeof dataUrl === 'string' && dataUrl.length > 0) {
                     giaLogoEl.src = dataUrl;
@@ -392,7 +385,7 @@
                 }
             });
 
-            ipcRenderer.on('meeting-popup:recording-ended', () => {
+            api.onRecordingEnded(() => {
                 // Window will be closed by main process
             });
         </script>

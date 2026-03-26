@@ -19,6 +19,9 @@ module.exports = {
             "./src/onboarding-popup.html",
             "./src/debug-controls.html",
             "./src/debug-controls-renderer.js",
+            "./src/meeting-popup-preload.js",
+            "./src/onboarding-preload.js",
+            "./src/debug-controls-preload.js",
         ],
         // Local packaging/dev: don't require code signing unless explicitly enabled.
         // Enable signing by running with: GIA_MAC_SIGN=1 npm run package

@@ -1,8 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import * as util from 'util';
 
-let logFilePath = null;
 let baseContext = {};
 let teeToConsole = true;
 let loggingApiUrl = null;
@@ -39,16 +36,6 @@ function formatArgs(args) {
         return util.format(...args);
     } catch {
         return args.map((a) => (typeof a === 'string' ? a : safeJson(a))).join(' ');
-    }
-}
-
-function appendToFile(line) {
-    if (!logFilePath) return;
-    try {
-        fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
-        fs.appendFileSync(logFilePath, line + '\n', 'utf8');
-    } catch {
-        // ignore local file logging failures
     }
 }
 
@@ -160,12 +147,6 @@ function emit(level, args, context) {
         }
     }
 
-    appendToFile(
-        `[${new Date().toISOString()}] [${level}] ${msg}${
-            Object.keys(mergedContext).length ? ` ${safeJson(mergedContext)}` : ''
-        }`,
-    );
-
     const remotePayload = {
         message: msg,
         level: toApiLevel(level),
@@ -239,10 +220,6 @@ const logger = {
     setUserId(userId) {
         const normalized = typeof userId === 'string' && userId.length ? userId : null;
         baseContext = { ...(baseContext || {}), userId: normalized, user_id: normalized };
-    },
-
-    setLogFilePath(p) {
-        logFilePath = p || null;
     },
 
     setTeeToConsole(enabled) {

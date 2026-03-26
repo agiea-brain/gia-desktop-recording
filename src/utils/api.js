@@ -31,11 +31,21 @@ class Api {
         }
     }
 
+    async _fetch(url, options, { timeoutMs = 60000 } = {}) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            return await fetch(url, { ...options, signal: controller.signal });
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
     async getUploadToken() {
         if (!this.authToken) {
             throw new Error('Missing auth token (call setAuthToken first)');
         }
-        const response = await fetch(`${this.apiUrl}${apiRoutes.getUploadToken}`, {
+        const response = await this._fetch(`${this.apiUrl}${apiRoutes.getUploadToken}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -66,7 +76,7 @@ class Api {
         if (!this.authToken) {
             throw new Error('Missing auth token (call setAuthToken first)');
         }
-        const response = await fetch(`${this.apiUrl}${apiRoutes.registerMeetingUrl}`, {
+        const response = await this._fetch(`${this.apiUrl}${apiRoutes.registerMeetingUrl}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -90,7 +100,7 @@ class Api {
             throw new Error('Missing auth token (call setAuthToken first)');
         }
 
-        const response = await fetch(`${this.apiUrl}${apiRoutes.getUserProfile}`, {
+        const response = await this._fetch(`${this.apiUrl}${apiRoutes.getUserProfile}`, {
             method: 'GET',
             headers: {
                 Accept: 'application/json',
@@ -116,7 +126,7 @@ class Api {
             throw new Error('Missing auth token (call setAuthToken first)');
         }
 
-        const response = await fetch(`${this.apiUrl}${apiRoutes.updateDesktopSdkDiagnostics}`, {
+        const response = await this._fetch(`${this.apiUrl}${apiRoutes.updateDesktopSdkDiagnostics}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',

@@ -633,17 +633,10 @@
         </div>
 
         <script>
-            const { ipcRenderer } = require('electron');
+            const api = window.electronAPI;
 
             // Route logs through main-process
             (() => {
-                const send = (level, ...args) =>
-                    ipcRenderer.send('app-log', {
-                        level,
-                        args,
-                        context: { source: 'onboarding-popup' },
-                    });
-
                 const original = {
                     log: console.log?.bind(console),
                     info: console.info?.bind(console),
@@ -653,19 +646,19 @@
 
                 console.log = (...args) => {
                     original.log?.(...args);
-                    send('info', ...args);
+                    api.log('info', ...args);
                 };
                 console.info = (...args) => {
                     original.info?.(...args);
-                    send('info', ...args);
+                    api.log('info', ...args);
                 };
                 console.warn = (...args) => {
                     original.warn?.(...args);
-                    send('warn', ...args);
+                    api.log('warn', ...args);
                 };
                 console.error = (...args) => {
                     original.error?.(...args);
-                    send('error', ...args);
+                    api.log('error', ...args);
                 };
             })();
 
@@ -696,15 +689,15 @@
 
             // Window controls
             closeBtn.addEventListener('click', () => {
-                ipcRenderer.invoke('onboarding:close');
+                api.close();
             });
             minimizeBtn.addEventListener('click', () => {
-                ipcRenderer.invoke('onboarding:minimize');
+                api.minimize();
             });
 
             // Learn more about permissions
             document.getElementById('learnMorePermissions').addEventListener('click', () => {
-                require('electron').shell.openExternal('https://platform.myagiea.com/account-settings/join-call?section=mac-permissions');
+                api.openExternal('https://platform.myagiea.com/account-settings/join-call?section=mac-permissions');
             });
 
             // Show specific view
@@ -780,7 +773,7 @@
             // Check all permissions and update states
             async function autoCheckGrantedPermissions() {
                 for (const step of permissionSteps) {
-                    const result = await ipcRenderer.invoke('onboarding:check-permission', step);
+                    const result = await api.checkPermission(step);
                     permissionStates[step] = result.granted;
                 }
                 initPermissionsView();
@@ -799,17 +792,17 @@
                 loginBtn.innerHTML = '<div class="spinner"></div>Signing in...';
 
                 try {
-                    const result = await ipcRenderer.invoke('onboarding:login');
+                    const result = await api.login();
                     if (result.success) {
                         if (isWindows) {
                             // Windows doesn't need permissions — skip to complete
                             console.log('Login successful, skipping permissions (Windows)');
                             permissionBtn.disabled = true;
-                            await ipcRenderer.invoke('onboarding:complete');
+                            await api.complete();
                             return;
                         }
                         console.log('Login successful, moving to permissions');
-                        await ipcRenderer.invoke('onboarding:resize', VIEW_SIZES.permissions);
+                        await api.resize(VIEW_SIZES.permissions);
                         showView('permissionsView');
                         initPermissionsView();
                         await autoCheckGrantedPermissions();
@@ -859,7 +852,7 @@
                 link.addEventListener('click', function (e) {
                     e.stopPropagation();
                     var permission = link.dataset.permission;
-                    ipcRenderer.invoke('onboarding:open-settings', permission);
+                    api.openSettings(permission);
                 });
             });
 
@@ -872,7 +865,7 @@
                     console.log('Finishing setup...');
                     permissionBtn.disabled = true;
                     permissionBtn.innerHTML = '<div class="spinner"></div>Finishing...';
-                    await ipcRenderer.invoke('onboarding:complete');
+                    await api.complete();
                     return;
                 }
 
@@ -886,7 +879,7 @@
                 permissionBtn.innerHTML = '<div class="spinner"></div>Requesting...';
 
                 try {
-                    const result = await ipcRenderer.invoke('onboarding:request-permission', step);
+                    const result = await api.requestPermission(step);
                     console.log('Permission ' + step + ' result:', result);
 
                     if (result.granted) {
@@ -904,11 +897,11 @@
 
             // Get Started button
             getStartedBtn.addEventListener('click', async () => {
-                await ipcRenderer.invoke('onboarding:get-started');
+                await api.getStarted();
             });
 
             // Receive the Gia logo from main
-            ipcRenderer.on('onboarding:logo', (_event, payload) => {
+            api.onLogo((payload) => {
                 const dataUrl = payload?.dataUrl;
                 if (typeof dataUrl === 'string' && dataUrl.length > 0) {
                     giaLogoEl.src = dataUrl;
@@ -919,14 +912,14 @@
             });
 
             // Handle initial state from main process
-            ipcRenderer.on('onboarding:init', async (_event, payload) => {
+            api.onInit(async (payload) => {
                 console.log('Onboarding init:', payload);
                 isWindows = payload.platform === 'win32';
 
                 // Windows doesn't need permissions — skip straight to complete
                 if (isWindows && payload.view === 'permissions') {
                     console.log('Skipping permissions view (Windows)');
-                    await ipcRenderer.invoke('onboarding:complete');
+                    await api.complete();
                     return;
                 }
 
@@ -958,7 +951,7 @@
             });
 
             // Listen for permission status updates (in case granted via System Preferences)
-            ipcRenderer.on('onboarding:permission-status', (_event, payload) => {
+            api.onPermissionStatus((payload) => {
                 console.log('Permission status update:', payload);
                 const { permission, granted } = payload;
 

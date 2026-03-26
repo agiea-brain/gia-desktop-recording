@@ -530,7 +530,7 @@ export async function login({
     }
 
     if (!callback?.code) throw new Error('No authorization code returned');
-    if (callback?.state && callback.state !== state) throw new Error('Invalid OAuth state');
+    if (!callback?.state || callback.state !== state) throw new Error('Invalid OAuth state');
 
     const tokenResponse = await exchangeCodeForTokens({
         domain,
