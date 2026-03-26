@@ -244,12 +244,6 @@
                 background: var(--border);
                 transition: background 0.3s ease;
             }
-            .progress-segment.filled {
-                background: var(--primary);
-            }
-            .progress-segment.success {
-                background: var(--success);
-            }
 
             /* Steps */
             .stepper {
@@ -271,11 +265,6 @@
             .step.active {
                 border-color: var(--primary);
                 background: var(--secondary);
-            }
-
-            .step.completed {
-                border-color: var(--success);
-                background: var(--success-light);
             }
 
             .step.pending {
@@ -459,7 +448,6 @@
                 text-align: center;
                 margin-bottom: 16px;
             }
-            .login-message.visible { display: block; }
         </style>
     </head>
     <body>
@@ -475,7 +463,7 @@
             <!-- Login View -->
             <div class="view active" id="loginView">
                 <div class="view-body view-body--centered">
-                    <img class="login-logo" id="giaLogo" alt="Gia" />
+                    <img class="login-logo" id="giaLogo" alt="Gia"  src=""/>
                     <div class="login-message" id="loginMessage"></div>
                     <h1 class="login-heading">Never miss a meeting detail</h1>
                     <p class="login-subtitle">Transcribe, and summarize every call</p>
