@@ -1,4 +1,4 @@
-import { loadEnv } from './load-env';
+import {loadEnv} from './load-env';
 import logger from './logger';
 
 // Ensure env is loaded even when cwd isn't repo root.
@@ -61,9 +61,8 @@ class Api {
             this._handleUnauthorized(response.status);
             throw err;
         }
-        const data = (await response.json()) || {};
         // Return the full data object so we can check for both uploadToken and upload_token
-        return data;
+        return (await response.json()) || {};
     }
 
     async registerMeetingUrl({ meetingUrl, recordingId, sdkUploadId }) {
@@ -91,8 +90,7 @@ class Api {
             this._handleUnauthorized(response.status);
             throw new Error(`Failed to register meeting URL (${response.status}): ${body}`);
         }
-        const data = (await response.json()) || {};
-        return data;
+        return (await response.json()) || {};
     }
 
     async getUserProfile() {
@@ -117,8 +115,7 @@ class Api {
             throw err;
         }
 
-        const data = (await response.json()) || {};
-        return data;
+        return (await response.json()) || {};
     }
 
     async updateDesktopSdkDiagnostics({ timestamp, platform, version, permissions }) {
@@ -126,20 +123,23 @@ class Api {
             throw new Error('Missing auth token (call setAuthToken first)');
         }
 
-        const response = await this._fetch(`${this.apiUrl}${apiRoutes.updateDesktopSdkDiagnostics}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-                Authorization: `Bearer ${this.authToken}`,
+        const response = await this._fetch(
+            `${this.apiUrl}${apiRoutes.updateDesktopSdkDiagnostics}`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    Authorization: `Bearer ${this.authToken}`,
+                },
+                body: JSON.stringify({
+                    timestamp,
+                    platform,
+                    version,
+                    permissions,
+                }),
             },
-            body: JSON.stringify({
-                timestamp,
-                platform,
-                version,
-                permissions,
-            }),
-        });
+        );
 
         if (!response.ok) {
             const body = await response.text().catch(() => '');
@@ -152,8 +152,7 @@ class Api {
             throw err;
         }
 
-        const data = (await response.json().catch(() => null)) || {};
-        return data;
+        return (await response.json().catch(() => null)) || {};
     }
 }
 

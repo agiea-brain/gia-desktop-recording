@@ -75,31 +75,36 @@ const api = new Api();
 // When any API call gets a 401, clear auth state and prompt re-login.
 let authExpiredPopupShown = false;
 api.onAuthExpired = async () => {
-	if (authExpiredPopupShown) return;
-	logger.info('[auth] token expired (401), attempting silent refresh');
+    if (authExpiredPopupShown) return;
+    logger.info('[auth] token expired (401), attempting silent refresh');
 
-	// Try silent refresh first
-	try {
-		const token = await getStoredAccessToken({ allowRefresh: true });
-		if (token) {
-			logger.info('[auth] silent refresh succeeded');
-			api.setAuthToken(token);
-			await syncUserIdFromProfile();
-			refreshTrayMenu();
-			return;
-		}
-	} catch (e) {
-		logger.warn('[auth] silent refresh failed:', e);
-	}
+    // Try silent refresh first
+    try {
+        const token = await getStoredAccessToken({ allowRefresh: true });
+        if (token) {
+            logger.info('[auth] silent refresh succeeded');
+            api.setAuthToken(token);
+            await syncUserIdFromProfile();
+            refreshTrayMenu();
+            return;
+        }
+    } catch (e) {
+        logger.warn('[auth] silent refresh failed:', e);
+    }
 
-	// Silent refresh failed — prompt re-login
-	authExpiredPopupShown = true;
-	logger.info('[auth] prompting re-login');
-	api.setAuthToken(null);
-	await syncUserIdFromProfile();
-	refreshTrayMenu();
-	showOnboardingPopup({view: 'login', message: 'Your session has expired. Please sign in again.'});
-	setTimeout(() => { authExpiredPopupShown = false; }, 30000);
+    // Silent refresh failed — prompt re-login
+    authExpiredPopupShown = true;
+    logger.info('[auth] prompting re-login');
+    api.setAuthToken(null);
+    await syncUserIdFromProfile();
+    refreshTrayMenu();
+    showOnboardingPopup({
+        view: 'login',
+        message: 'Your session has expired. Please sign in again.',
+    });
+    setTimeout(() => {
+        authExpiredPopupShown = false;
+    }, 30000);
 };
 
 // Toggle developer-only tray items.
@@ -621,7 +626,6 @@ function setupPermissionLogging({ onChange } = {}) {
     setInterval(() => log('poll'), 2000).unref?.();
 }
 
-
 // Onboarding state management
 function getOnboardingStatePath() {
     return path.join(app.getPath('userData'), 'onboarding.json');
@@ -797,8 +801,12 @@ async function startMeetingRecordingWithAuth({ source = 'unknown' } = {}) {
 
 function buildTrayMenu() {
     const statusLabel = !isRecording
-        ? (cachedUserFirstName ? `Hi ${cachedUserFirstName}` : 'Idle')
-        : isPaused ? 'Paused' : 'Recording...';
+        ? cachedUserFirstName
+            ? `Hi ${cachedUserFirstName}`
+            : 'Idle'
+        : isPaused
+          ? 'Paused'
+          : 'Recording...';
     // Treat "Start Recording" as another way to accept the popup:
     // if a meeting is active and we're not already recording, allow manual start.
     const canManualStart = !!currentMeetingInfo && !isRecording && !userWantsToRecord;
@@ -842,21 +850,21 @@ function buildTrayMenu() {
                   },
                   {
                       label: 'Stop Recording',
-            click: async () => {
-                try {
-                    const windowId = currentMeetingInfo?.windowId;
-                    suppressMeetingPopupForWindow(windowId, 'tray-stop');
-                    await stopMeetingRecording();
-                } catch (e) {
-                    logger.error('[tray] failed to stop recording:', e);
-                } finally {
-                    userWantsToRecord = false;
-                    recordingStarted = false;
-                    userStoppedRecording = true;
-                    closeMeetingPopup();
-                }
-            },
-              },
+                      click: async () => {
+                          try {
+                              const windowId = currentMeetingInfo?.windowId;
+                              suppressMeetingPopupForWindow(windowId, 'tray-stop');
+                              await stopMeetingRecording();
+                          } catch (e) {
+                              logger.error('[tray] failed to stop recording:', e);
+                          } finally {
+                              userWantsToRecord = false;
+                              recordingStarted = false;
+                              userStoppedRecording = true;
+                              closeMeetingPopup();
+                          }
+                      },
+                  },
               ]
             : []),
         { type: 'separator' },

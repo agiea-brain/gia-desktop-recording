@@ -13,10 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     complete: () => ipcRenderer.invoke('onboarding:complete'),
     getStarted: () => ipcRenderer.invoke('onboarding:get-started'),
     openExternal: (url) => shell.openExternal(url),
-    onLogo: (callback) =>
-        ipcRenderer.on('onboarding:logo', (_event, payload) => callback(payload)),
-    onInit: (callback) =>
-        ipcRenderer.on('onboarding:init', (_event, payload) => callback(payload)),
+    onLogo: (callback) => ipcRenderer.on('onboarding:logo', (_event, payload) => callback(payload)),
+    onInit: (callback) => ipcRenderer.on('onboarding:init', (_event, payload) => callback(payload)),
     onPermissionStatus: (callback) =>
         ipcRenderer.on('onboarding:permission-status', (_event, payload) => callback(payload)),
 });
