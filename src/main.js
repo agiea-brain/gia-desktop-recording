@@ -103,6 +103,7 @@ let onboardingWindow = null;
 let currentMeetingInfo = null; // { windowId, meetingUrl, uploadToken, recordingId, sdkUploadId, lastRegisteredMeetingUrl, lastRegisterAttemptUrl, lastRegisterAttemptAt }
 let userWantsToRecord = false; // Set to true when user confirms they want to record
 let recordingStarted = false; // Ensures recording only starts once per meeting
+let userStoppedRecording = false; // True when user manually stopped — keeps currentMeetingInfo alive on idle
 
 function bringWindowToFront(win, reason = 'unknown') {
     try {
@@ -434,6 +435,7 @@ function readPermissionStates() {
 }
 
 function areAllPermissionsGranted() {
+    if (process.platform === 'win32') return true;
     const p = readPermissionStates();
     return p.microphone === 'granted' && p.accessibility === true && p.screenCapture === 'granted';
 }
@@ -448,6 +450,7 @@ function getPermissionsBooleans() {
 }
 
 function handlePermissionRevocation({ prev, next, reason }) {
+    if (process.platform === 'win32') return;
     if (!prev) return; // first run, nothing to compare
 
     // Detect any permission that went from granted → not granted
@@ -815,24 +818,24 @@ function buildTrayMenu() {
                   },
               ]
             : []),
-        {
-            label: isPaused ? 'Resume Recording' : 'Pause Recording',
-            enabled: isRecording,
-            click: async () => {
-                try {
-                    if (isPaused) {
-                        await resumeMeetingRecording();
-                    } else {
-                        await pauseMeetingRecording();
-                    }
-                } catch (e) {
-                    logger.error('[tray] failed to toggle pause:', e);
-                }
-            },
-        },
-        {
-            label: 'Stop Recording',
-            enabled: isRecording,
+        ...(isRecording
+            ? [
+                  {
+                      label: isPaused ? 'Resume Recording' : 'Pause Recording',
+                      click: async () => {
+                          try {
+                              if (isPaused) {
+                                  await resumeMeetingRecording();
+                              } else {
+                                  await pauseMeetingRecording();
+                              }
+                          } catch (e) {
+                              logger.error('[tray] failed to toggle pause:', e);
+                          }
+                      },
+                  },
+                  {
+                      label: 'Stop Recording',
             click: async () => {
                 try {
                     const windowId = currentMeetingInfo?.windowId;
@@ -841,14 +844,15 @@ function buildTrayMenu() {
                 } catch (e) {
                     logger.error('[tray] failed to stop recording:', e);
                 } finally {
-                    // Clear meeting state after the stop attempt to avoid stuck UI/state.
                     userWantsToRecord = false;
                     recordingStarted = false;
-                    currentMeetingInfo = null;
+                    userStoppedRecording = true;
                     closeMeetingPopup();
                 }
             },
-        },
+              },
+              ]
+            : []),
         { type: 'separator' },
         ...(DEBUG
             ? [
@@ -1271,6 +1275,7 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
                     message,
                     firstName: cachedUserFirstName,
                     permissions: getPermissionsBooleans(),
+                    platform: process.platform,
                 });
             }
         } catch (e) {
@@ -1344,6 +1349,7 @@ function ensureRecallRuntimeListenersRegistered() {
         // Reset flags for new meeting
         userWantsToRecord = false;
         recordingStarted = false;
+        userStoppedRecording = false;
 
         try {
             logger.info('[recall] meeting detected: initializing meeting state');
@@ -1479,7 +1485,7 @@ function ensureRecallRuntimeListenersRegistered() {
                 }
 
                 setCaptureState({ recording: false, paused: false });
-                // Close popup when meeting ends (goes to idle)
+                // Close popup when recording ends
                 if (meetingPopupWindow && !meetingPopupWindow.isDestroyed()) {
                     logger.info('[recall] closing popup due to idle state');
                     meetingPopupWindow.webContents.send('meeting-popup:recording-ended');
@@ -1487,12 +1493,18 @@ function ensureRecallRuntimeListenersRegistered() {
                         closeMeetingPopup();
                     }, 100);
                 }
-                // Clear suppression for this meeting since it truly ended
                 clearMeetingPopupSuppression(currentMeetingInfo?.windowId);
-                // Reset all meeting state
                 userWantsToRecord = false;
                 recordingStarted = false;
-                currentMeetingInfo = null;
+                if (userStoppedRecording) {
+                    // User manually stopped — keep currentMeetingInfo for "Start Recording"
+                    logger.info('[recall] idle after user stop — keeping meeting info for restart');
+                    userStoppedRecording = false;
+                } else {
+                    // Meeting actually closed — clear everything
+                    logger.info('[recall] idle — meeting closed, clearing meeting info');
+                    currentMeetingInfo = null;
+                }
                 refreshTrayMenu();
                 break;
             default:
@@ -1512,13 +1524,13 @@ function ensureRecallRuntimeListenersRegistered() {
                 closeMeetingPopup();
             }, 100);
         }
-        // Clear suppression for this meeting since it truly ended
+        // Clear suppression so user can restart recording from tray
         const endedWindowId = evt.window?.id || currentMeetingInfo?.windowId;
         clearMeetingPopupSuppression(endedWindowId);
-        // Reset all meeting state
+        // Reset recording flags but keep currentMeetingInfo
+        // so "Start Recording" remains available while meeting is still active
         userWantsToRecord = false;
         recordingStarted = false;
-        currentMeetingInfo = null;
         refreshTrayMenu();
     });
 }
@@ -2110,6 +2122,7 @@ async function setupMeetingPopupIpc() {
         suppressMeetingPopupForWindow(windowId, 'popup-decline');
         userWantsToRecord = false;
         recordingStarted = false;
+        // Keep currentMeetingInfo so "Start Recording" remains in tray
         closeMeetingPopup();
         refreshTrayMenu();
     });
@@ -2130,17 +2143,15 @@ async function setupMeetingPopupIpc() {
         suppressMeetingPopupForWindow(windowId, 'popup-end-recording');
         try {
             await stopMeetingRecording();
-            // Clear meeting info after stopping
             userWantsToRecord = false;
             recordingStarted = false;
-            currentMeetingInfo = null;
+            userStoppedRecording = true;
             closeMeetingPopup();
         } catch (error) {
             logger.error('[meeting-popup] failed to end recording:', error);
-            // Clear meeting info even on error to prevent stuck state
             userWantsToRecord = false;
             recordingStarted = false;
-            currentMeetingInfo = null;
+            userStoppedRecording = true;
             closeMeetingPopup();
         }
     });
@@ -2493,7 +2504,7 @@ async function bootstrap() {
                     }
 
                     setCaptureState({ recording: false, paused: false });
-                    // Close popup when meeting ends (goes to idle)
+                    // Close popup when recording ends
                     if (meetingPopupWindow && !meetingPopupWindow.isDestroyed()) {
                         logger.info('[recall] closing popup due to idle state');
                         meetingPopupWindow.webContents.send('meeting-popup:recording-ended');
@@ -2501,12 +2512,16 @@ async function bootstrap() {
                             closeMeetingPopup();
                         }, 100);
                     }
-                    // Clear suppression for this meeting since it truly ended
                     clearMeetingPopupSuppression(currentMeetingInfo?.windowId);
-                    // Reset all meeting state
                     userWantsToRecord = false;
                     recordingStarted = false;
-                    currentMeetingInfo = null;
+                    if (userStoppedRecording) {
+                        logger.info('[recall] idle after user stop — keeping meeting info for restart');
+                        userStoppedRecording = false;
+                    } else {
+                        logger.info('[recall] idle — meeting closed, clearing meeting info');
+                        currentMeetingInfo = null;
+                    }
                     refreshTrayMenu();
                     break;
                 default:
@@ -2526,13 +2541,12 @@ async function bootstrap() {
                     closeMeetingPopup();
                 }, 100);
             }
-            // Clear suppression for this meeting since it truly ended
+            // Clear suppression so user can restart recording from tray
             const endedWindowId = evt.window?.id || currentMeetingInfo?.windowId;
             clearMeetingPopupSuppression(endedWindowId);
-            // Reset all meeting state
+            // Reset recording flags but keep currentMeetingInfo
             userWantsToRecord = false;
             recordingStarted = false;
-            currentMeetingInfo = null;
             refreshTrayMenu();
         });
     } else {

@@ -680,6 +680,8 @@
             const closeBtn = document.getElementById('closeBtn');
             const minimizeBtn = document.getElementById('minimizeBtn');
 
+            let isWindows = false;
+
             // Permission steps
             const permissionSteps = ['microphone', 'accessibility', 'screen'];
             let currentStepIndex = 0;
@@ -799,6 +801,13 @@
                 try {
                     const result = await ipcRenderer.invoke('onboarding:login');
                     if (result.success) {
+                        if (isWindows) {
+                            // Windows doesn't need permissions — skip to complete
+                            console.log('Login successful, skipping permissions (Windows)');
+                            permissionBtn.disabled = true;
+                            await ipcRenderer.invoke('onboarding:complete');
+                            return;
+                        }
                         console.log('Login successful, moving to permissions');
                         await ipcRenderer.invoke('onboarding:resize', VIEW_SIZES.permissions);
                         showView('permissionsView');
@@ -910,8 +919,16 @@
             });
 
             // Handle initial state from main process
-            ipcRenderer.on('onboarding:init', (_event, payload) => {
+            ipcRenderer.on('onboarding:init', async (_event, payload) => {
                 console.log('Onboarding init:', payload);
+                isWindows = payload.platform === 'win32';
+
+                // Windows doesn't need permissions — skip straight to complete
+                if (isWindows && payload.view === 'permissions') {
+                    console.log('Skipping permissions view (Windows)');
+                    await ipcRenderer.invoke('onboarding:complete');
+                    return;
+                }
 
                 if (payload.view === 'ready') {
                     if (payload.firstName) {
