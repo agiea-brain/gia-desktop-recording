@@ -1,7 +1,11 @@
 <!doctype html>
-<html>
+<html lang="en">
     <head>
         <meta charset="UTF-8" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+        />
         <meta name="application-name" content="Gia" />
         <title>Record Meeting?</title>
         <style>
@@ -130,7 +134,7 @@
                 font-weight: 500;
             }
 
-            .recording-status.active {
+            .recording-status {
                 display: flex;
             }
 
@@ -249,7 +253,7 @@
 
         <div class="container">
             <div class="header-row">
-                <img class="gia-logo" id="giaLogo" alt="Gia" />
+                <img class="gia-logo" id="giaLogo" alt="Gia"  src=""/>
                 <h1 id="title">Record this meeting?</h1>
             </div>
             <p id="message">A meeting has been detected. Would you like Gia to record it?</p>

@@ -9,7 +9,7 @@
     },
     "main": ".webpack/main",
     "scripts": {
-        "start": "concurrently \"npm run start:server\" \"npm run start:electron\"",
+        "start": "electron-forge start",
         "start:electron": "electron-forge start",
         "package": "electron-forge package",
         "make": "electron-forge make",
@@ -52,7 +52,6 @@
         "@recallai/desktop-sdk": "2.0.8",
         "@timfish/forge-externals-plugin": "^0.2.1",
         "axios": "^1.13.6",
-        "concurrently": "^9.2.1",
         "dotenv": "^16.6.1",
         "electron-squirrel-startup": "^1.0.1",
         "express": "^4.18.2",
