@@ -11,4 +11,7 @@ module.exports = {
     rules,
   },
   entry: {},
+  cache: {
+    type: 'filesystem',
+  }
 };
