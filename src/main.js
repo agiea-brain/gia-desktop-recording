@@ -1523,6 +1523,7 @@ function ensureRecallRuntimeListenersRegistered() {
                     break;
                 }
 
+                const wasRecording = isRecording;
                 setCaptureState({ recording: false, paused: false });
                 // Close popup when recording ends
                 if (meetingPopupWindow && !meetingPopupWindow.isDestroyed()) {
@@ -1532,7 +1533,12 @@ function ensureRecallRuntimeListenersRegistered() {
                         closeMeetingPopup();
                     }, 100);
                 }
-                clearMeetingPopupSuppression(currentMeetingInfo?.windowId);
+                // Only clear suppression if we were actually recording.
+                // If the user declined, keep suppression so the popup
+                // doesn't re-appear when the SDK re-emits meeting-detected.
+                if (wasRecording) {
+                    clearMeetingPopupSuppression(currentMeetingInfo?.windowId);
+                }
                 userWantsToRecord = false;
                 recordingStarted = false;
                 if (userStoppedRecording) {
