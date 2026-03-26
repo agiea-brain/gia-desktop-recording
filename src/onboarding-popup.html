@@ -593,7 +593,7 @@
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                     </div>
-                    <h1 class="ready-heading">You're good to go</h1>
+                    <h1 class="ready-heading" id="readyHeading">You're good to go</h1>
                     <p class="ready-subtitle">
                         Gia is running in your menu bar. You'll be prompted when a meeting starts.
                     </p>
@@ -895,6 +895,9 @@
                 console.log('Onboarding init:', payload);
 
                 if (payload.view === 'ready') {
+                    if (payload.firstName) {
+                        document.getElementById('readyHeading').textContent = "You're good to go, " + payload.firstName;
+                    }
                     showView('readyView');
                 } else if (payload.view === 'permissions') {
                     showView('permissionsView');

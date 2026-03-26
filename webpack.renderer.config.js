@@ -12,6 +12,5 @@ module.exports = {
   },
   entry: {
     renderer: './src/renderer.js',
-    'note-editor/renderer': './src/pages/note-editor/renderer.js',
   },
 };

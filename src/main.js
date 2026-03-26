@@ -1246,6 +1246,7 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
                 onboardingWindow.webContents.send('onboarding:init', {
                     view,
                     message,
+                    firstName: cachedUserFirstName,
                     permissions: getPermissionsBooleans(),
                 });
             }
@@ -1691,6 +1692,7 @@ async function setupOnboardingIpc() {
                 onboardingWindow.center();
                 onboardingWindow.webContents.send('onboarding:init', {
                     view: 'ready',
+                    firstName: cachedUserFirstName,
                     permissions: getPermissionsBooleans(),
                 });
                 bringOnboardingToFront('onboarding-complete-ready');
