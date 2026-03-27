@@ -70,3 +70,12 @@ Optional:
 
 - `DEBUG=true` - Enables debug tray menu items and debug controls window
 - `GIA_MAC_SIGN=1` - Enable macOS code signing
+
+
+```
+# Build DMG file
+GIA_MAC_SIGN=1 npm run make
+
+# Notarize DMG
+xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile "gia-notarize"
+```
