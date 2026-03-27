@@ -470,6 +470,48 @@ function getPermissionsBooleans() {
     };
 }
 
+function hasActiveMeetingWaitingForRecording() {
+    return !!currentMeetingInfo && !isRecording;
+}
+
+function showJoinMeetingPopupForInsufficientPermissions(reason = 'unknown') {
+    if (!hasActiveMeetingWaitingForRecording()) return false;
+
+    logger.info('[permissions] showing join meeting popup for active meeting', {
+        reason,
+        windowId: currentMeetingInfo?.windowId ?? null,
+    });
+    showMeetingPopup();
+    refreshTrayMenu();
+    return true;
+}
+
+function showPermissionsPopupForMissingPermissions(reason = 'unknown') {
+    logger.info('[permissions] showing permissions popup', { reason });
+    showOnboardingPopup({ view: 'permissions' });
+}
+
+function buildInsufficientPermissionsError(reason = 'unknown') {
+    const error = new Error(`Insufficient permissions to start recording (${reason})`);
+    error.code = 'INSUFFICIENT_PERMISSIONS';
+    return error;
+}
+
+function isInsufficientPermissionsError(error) {
+    if (error?.code === 'INSUFFICIENT_PERMISSIONS') return true;
+
+    const detail =
+        error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : JSON.stringify(error ?? '');
+
+    return /permission|screen.?capture|microphone|accessibility|not authorized|not permitted/i.test(
+        detail,
+    );
+}
+
 function handlePermissionRevocation({ prev, next, reason }) {
     if (process.platform === 'win32') return;
     if (!prev) return; // first run, nothing to compare
@@ -486,10 +528,8 @@ function handlePermissionRevocation({ prev, next, reason }) {
         revoked: { mic: micRevoked, accessibility: accRevoked, screen: scrRevoked },
     });
 
-    // Open popup if none exists; if already open, onPermissionChange handles the UI update
-    if (!onboardingWindow || onboardingWindow.isDestroyed()) {
-        showOnboardingPopup({ view: 'permissions' });
-    }
+    showJoinMeetingPopupForInsufficientPermissions(`revoked:${reason}`);
+    showPermissionsPopupForMissingPermissions(`revoked:${reason}`);
 }
 
 function onPermissionChange({ prev, next, reason }) {
@@ -772,6 +812,12 @@ async function startMeetingRecordingWithAuth({ source = 'unknown' } = {}) {
     logger.info(`[recall] currentMeetingInfo: ${JSON.stringify(currentMeetingInfo)}`);
 
     try {
+        if (!areAllPermissionsGranted()) {
+            showJoinMeetingPopupForInsufficientPermissions(`preflight:${source}`);
+            showPermissionsPopupForMissingPermissions(`preflight:${source}`);
+            throw buildInsufficientPermissionsError(`preflight:${source}`);
+        }
+
         const accessToken = await ensureAccessToken({ interactive: true });
         if (!accessToken) {
             throw new Error('Not authenticated: no access token available');
@@ -794,6 +840,10 @@ async function startMeetingRecordingWithAuth({ source = 'unknown' } = {}) {
         // Keep meeting info so the user can retry while meeting is still active.
         userWantsToRecord = false;
         recordingStarted = false;
+        if (isInsufficientPermissionsError(error)) {
+            showJoinMeetingPopupForInsufficientPermissions(`start-failed:${source}`);
+            showPermissionsPopupForMissingPermissions(`start-failed:${source}`);
+        }
         refreshTrayMenu();
         throw error;
     }
@@ -2158,7 +2208,9 @@ async function setupMeetingPopupIpc() {
             // Reset state so we don't get stuck in a "confirmed" flow on failure.
             userWantsToRecord = false;
             recordingStarted = false;
-            currentMeetingInfo = null;
+            if (!isInsufficientPermissionsError(error)) {
+                currentMeetingInfo = null;
+            }
             refreshTrayMenu();
             throw error;
         }

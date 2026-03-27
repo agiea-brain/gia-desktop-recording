@@ -100,7 +100,26 @@ module.exports = {
                 mainConfig: "./webpack.main.config.js",
                 renderer: {
                     config: "./webpack.renderer.config.js",
-                    entryPoints: [],
+                    entryPoints: [
+                        {
+                            name: "meeting-popup",
+                            preload: {
+                                js: "./src/meeting-popup-preload.js",
+                            },
+                        },
+                        {
+                            name: "onboarding-popup",
+                            preload: {
+                                js: "./src/onboarding-preload.js",
+                            },
+                        },
+                        {
+                            name: "debug-controls",
+                            preload: {
+                                js: "./src/debug-controls-preload.js",
+                            },
+                        },
+                    ],
                 },
             },
         },

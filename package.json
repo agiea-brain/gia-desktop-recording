@@ -9,19 +9,18 @@
     },
     "main": ".webpack/main",
     "scripts": {
-        "start": "electron-forge start",
-        "dev": "electron-forge start",
+        "start": "concurrently \"npm run start:server\" \"npm run start:electron\"",
+        "start:electron": "electron-forge start",
         "package": "electron-forge package",
         "make": "electron-forge make",
         "publish": "electron-forge publish",
-        "format": "prettier --write 'src/**/*.{js,html,css,json}'",
         "lint": "echo \"No linting configured\"",
         "start:server": "node ./src/server.js"
     },
     "keywords": [],
     "author": {
-        "name": "Sanjeevi",
-        "email": "sanjeevi@myagiea.com"
+        "name": "Nick Faro",
+        "email": "yux50000@hotmail.com"
     },
     "license": "MIT",
     "devDependencies": {
@@ -38,9 +37,8 @@
         "@electron/fuses": "^1.8.0",
         "@vercel/webpack-asset-relocator-loader": "^1.7.3",
         "css-loader": "^6.11.0",
-        "electron": "41.0.4",
+        "electron": "36.0.1",
         "node-loader": "^2.1.0",
-        "prettier": "^3.8.1",
         "style-loader": "^3.3.4"
     },
     "overrides": {
@@ -49,12 +47,23 @@
         }
     },
     "dependencies": {
+        "@anthropic-ai/sdk": "^0.40.1",
         "@recallai/desktop-sdk": "2.0.8",
         "@timfish/forge-externals-plugin": "^0.2.1",
-        "axios": "^1.13.6",
+        "axios": "^1.13.5",
+        "codemirror": "^6.0.1",
+        "concurrently": "^9.2.1",
         "dotenv": "^16.6.1",
+        "easymde": "^2.20.0",
         "electron-squirrel-startup": "^1.0.1",
         "express": "^4.18.2",
+        "logfire": "^0.12.0",
+        "marked": "^5.0.0",
+        "openai": "^4.97.0",
+        "react": "^19.1.0",
+        "react-dom": "^19.1.0",
+        "react-markdown": "^10.1.0",
+        "simplemde": "^1.11.2",
         "update-electron-app": "^3.1.2"
     }
 }
