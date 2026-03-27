@@ -741,6 +741,39 @@ function getTrayIconPath() {
     return candidates[0];
 }
 
+function getWindowsAppIconPath() {
+    if (app.isPackaged) {
+        const packagedCandidates = [
+            path.join(process.resourcesPath, 'gia-app.ico'),
+            path.join(process.resourcesPath, 'app.ico'),
+        ];
+
+        for (const p of packagedCandidates) {
+            try {
+                if (fs.existsSync(p)) return p;
+            } catch {
+                // ignore and try next candidate
+            }
+        }
+    }
+
+    const candidates = [
+        path.join(process.cwd(), 'src', 'assets', 'gia-app.ico'),
+        path.join(app.getAppPath(), 'src', 'assets', 'gia-app.ico'),
+        path.resolve(__dirname, '..', '..', 'src', 'assets', 'gia-app.ico'),
+    ];
+
+    for (const p of candidates) {
+        try {
+            if (fs.existsSync(p)) return p;
+        } catch {
+            // ignore and try next candidate
+        }
+    }
+
+    return candidates[0];
+}
+
 function refreshTrayMenu() {
     if (!tray) return;
     tray.setContextMenu(buildTrayMenu());
@@ -1247,6 +1280,7 @@ function showDebugControlsWindow({ focus = false } = {}) {
         frame: true,
         transparent: false,
         backgroundColor: '#0b0f14',
+        icon: process.platform === 'win32' ? getWindowsAppIconPath() : undefined,
         show: false,
         skipTaskbar: false,
         webPreferences: {
@@ -1335,6 +1369,7 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
         frame: false,
         transparent: false,
         backgroundColor: '#ffffff',
+        icon: process.platform === 'win32' ? getWindowsAppIconPath() : undefined,
         show: false,
         skipTaskbar: false,
         webPreferences: {
@@ -1880,6 +1915,7 @@ function showMeetingPopup() {
         frame: false,
         transparent: false,
         backgroundColor: '#ffffff',
+        icon: process.platform === 'win32' ? getWindowsAppIconPath() : undefined,
         show: false,
         skipTaskbar: false,
         webPreferences: {
@@ -2403,6 +2439,10 @@ async function bootstrap() {
         } catch {
             // ignore
         }
+    }
+
+    if (process.platform === 'win32') {
+        app.setAppUserModelId('com.gia.desktop-recording');
     }
 
     app.setName('Gia');
