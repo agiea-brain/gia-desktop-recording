@@ -1566,6 +1566,21 @@ function ensureRecallRuntimeListenersRegistered() {
         }
     });
 
+    RecallAiSdk.addEventListener('meeting-closed', (evt) => {
+        logger.info('[recall] meeting-closed event:', evt.window);
+        const windowId = evt.window?.id ?? null;
+        if (currentMeetingInfo && (!windowId || currentMeetingInfo.windowId === windowId)) {
+            logger.info('[recall] clearing meeting info after meeting closed');
+            clearMeetingPopupSuppression(windowId);
+            currentMeetingInfo = null;
+            userWantsToRecord = false;
+            recordingStarted = false;
+            userStoppedRecording = false;
+            closeMeetingPopup();
+            refreshTrayMenu();
+        }
+    });
+
     RecallAiSdk.addEventListener('meeting-updated', async (evt) => {
         const meetingUrl = evt.window?.url ?? null;
         const windowId = evt.window?.id ?? null;
