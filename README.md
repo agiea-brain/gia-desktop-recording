@@ -70,6 +70,7 @@ Optional:
 
 - `DEBUG=true` - Enables debug tray menu items and debug controls window
 - `GIA_MAC_SIGN=1` - Enable macOS code signing
+- `START_ON_LOGIN=false` - Disable launching Gia automatically when the user logs in
 
 
 ```
@@ -78,4 +79,7 @@ GIA_MAC_SIGN=1 npm run make
 
 # Notarize DMG
 xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile "gia-notarize"
+
+# Command to create zip of the codebase - for Windows exe
+zip -r gia-desktop-recording.zip . -x "node_modules/*" "build/*" "out/*" ".git/*" ".DS_Store" ".env*"
 ```
