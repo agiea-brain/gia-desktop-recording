@@ -892,7 +892,7 @@ function buildTrayMenu() {
           : 'Recording...';
     // Treat "Start Recording" as another way to accept the popup:
     // if a meeting is active and we're not already recording, allow manual start.
-    const canManualStart = !!currentMeetingInfo && !isRecording && !userWantsToRecord;
+    const canManualStart = !!currentMeetingInfo && !isRecording && !userWantsToRecord && !!cachedUserId;
     const template = [
         {
             label: statusLabel,
