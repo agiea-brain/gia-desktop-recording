@@ -78,7 +78,9 @@ Optional:
 GIA_MAC_SIGN=1 npm run make
 
 # Notarize DMG
-xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile "gia-notarize"
+xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile "gia-notarize" --wait
+xcrun stapler staple ./out/make/Gia-*.dmg
+xcrun stapler validate ./out/make/Gia-*.dmg
 
 # Command to create zip of the codebase - for Windows exe
 zip -r gia-desktop-recording.zip . -x "node_modules/*" "build/*" "out/*" ".git/*" ".DS_Store" ".env*"
