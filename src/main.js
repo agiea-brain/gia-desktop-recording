@@ -13,7 +13,13 @@ import {
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { isAuthenticated, login, logout, getStoredAccessToken } from './utils/auth';
+import {
+    consumeAuthCallbackUrl,
+    getStoredAccessToken,
+    isAuthenticated,
+    login,
+    logout,
+} from './utils/auth';
 import Api from './utils/api';
 import logger from './utils/logger';
 import { loadEnv } from './utils/load-env';
@@ -150,6 +156,15 @@ function handleDeepLinkUrl(rawUrl, source = 'unknown') {
         if (typeof rawUrl !== 'string' || rawUrl.length === 0) return;
         const u = new URL(rawUrl);
         if (u.protocol !== `${DEEPLINK_SCHEME}:`) return;
+
+        if (consumeAuthCallbackUrl(rawUrl)) {
+            logger.info('[deeplink] handled auth callback', { source });
+            if (bringWindowToFront(onboardingWindow, 'deeplink-auth-callback')) return;
+            if (bringWindowToFront(debugControlsWindow, 'deeplink-auth-callback')) return;
+            if (bringWindowToFront(meetingPopupWindow, 'deeplink-auth-callback')) return;
+            app.focus?.({ steal: true });
+            return;
+        }
 
         const action = (u.hostname || '').toLowerCase();
         logger.info('[deeplink] received', { source, url: rawUrl, action });
@@ -741,6 +756,48 @@ function getTrayIconPath() {
     return candidates[0];
 }
 
+function getMacAppIconPath() {
+    const candidates = app.isPackaged
+        ? [
+              path.join(process.resourcesPath, 'gia-app.icns'),
+              path.join(process.resourcesPath, 'gia-tray.png'),
+          ]
+        : [
+              path.join(process.cwd(), 'src', 'assets', 'gia-app.icns'),
+              path.join(app.getAppPath(), 'src', 'assets', 'gia-app.icns'),
+              path.resolve(__dirname, '..', '..', 'src', 'assets', 'gia-app.icns'),
+              path.join(process.cwd(), 'src', 'assets', 'gia-tray.png'),
+              path.join(app.getAppPath(), 'src', 'assets', 'gia-tray.png'),
+              path.resolve(__dirname, '..', '..', 'src', 'assets', 'gia-tray.png'),
+          ];
+
+    for (const p of candidates) {
+        try {
+            if (fs.existsSync(p)) return p;
+        } catch {
+            // ignore and try next candidate
+        }
+    }
+
+    return candidates[0];
+}
+
+function setMacAppIcon() {
+    if (process.platform !== 'darwin') return;
+    try {
+        const iconPath = getMacAppIconPath();
+        const image = nativeImage.createFromPath(iconPath);
+        if (image.isEmpty()) {
+            logger.warn('[app] failed to load mac app icon', { iconPath });
+            return;
+        }
+        app.dock?.setIcon(image);
+        logger.info('[app] mac app icon set', { iconPath });
+    } catch (e) {
+        logger.warn('[app] failed to set mac app icon', { error: e?.message });
+    }
+}
+
 function getWindowsAppIconPath() {
     if (app.isPackaged) {
         const packagedCandidates = [
@@ -892,7 +949,8 @@ function buildTrayMenu() {
           : 'Recording...';
     // Treat "Start Recording" as another way to accept the popup:
     // if a meeting is active and we're not already recording, allow manual start.
-    const canManualStart = !!currentMeetingInfo && !isRecording && !userWantsToRecord && !!cachedUserId;
+    const canManualStart =
+        !!currentMeetingInfo && !isRecording && !userWantsToRecord && !!cachedUserId;
     const template = [
         {
             label: statusLabel,
@@ -2441,6 +2499,8 @@ async function bootstrap() {
 
     logger.info('[app] starting Gia');
     logger.info('[app] version:', app.getVersion());
+
+    setMacAppIcon();
 
     // macOS: run as a menu bar app (no dock icon).
     if (process.platform === 'darwin') {

@@ -1,149 +1,217 @@
-import { app, shell } from 'electron';
+import {app, shell} from 'electron';
 import http from 'http';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
-import { loadEnv } from './load-env';
+import {loadEnv} from './load-env';
 
 /**
  * Auth0 OAuth (Authorization Code + PKCE) helper for Electron main-process.
  *
  * What you need to configure in Auth0:
- * - Allowed Callback URLs must include the redirect URI you use here.
- *   Default in this file: http://127.0.0.1:47823/callback
+ * - Allowed Callback URLs must include:
+ *   - Interactive login: http://127.0.0.1:47823/callback
+ *   - Silent login fallback: gia://auth/callback
  */
 
 // Ensure env is loaded before reading process.env into defaults.
 loadEnv();
 
 function ensureRequiredScopes(scopes) {
-    const parts = String(scopes || '')
-        .split(/\s+/)
-        .filter(Boolean);
-    if (!parts.includes('offline_access')) parts.push('offline_access');
-    return parts.join(' ');
+	const parts = String(scopes || '')
+		.split(/\s+/)
+		.filter(Boolean);
+	if (!parts.includes('offline_access')) parts.push('offline_access');
+	return parts.join(' ');
 }
 
 const DEFAULTS = {
-    domain: process.env.AUTH0_DOMAIN || 'auth.myagiea.com',
-    clientId: process.env.AUTH0_CLIENT_ID || '0E4ov2yLLLONevskQiqYzbRotpGdmX4q',
-    audience: process.env.AUTH0_AUDIENCE || 'https://api.heygia.com',
-    scopes: ensureRequiredScopes(process.env.AUTH0_SCOPES || 'openid profile email'),
-    redirectHost: process.env.AUTH0_REDIRECT_HOST || '127.0.0.1',
-    redirectPort: Number(process.env.AUTH0_REDIRECT_PORT || 47823),
-    redirectPath: process.env.AUTH0_REDIRECT_PATH || '/callback',
+	domain: process.env.AUTH0_DOMAIN || 'auth.myagiea.com',
+	clientId: process.env.AUTH0_CLIENT_ID || '0E4ov2yLLLONevskQiqYzbRotpGdmX4q',
+	audience: process.env.AUTH0_AUDIENCE || 'https://api.heygia.com',
+	scopes: ensureRequiredScopes(process.env.AUTH0_SCOPES || 'openid profile email'),
+	redirectHost: process.env.AUTH0_REDIRECT_HOST || '127.0.0.1',
+	redirectPort: Number(process.env.AUTH0_REDIRECT_PORT || 47823),
+	redirectPath: process.env.AUTH0_REDIRECT_PATH || '/callback',
 };
 
 const DEEPLINK_SCHEME = process.env.GIA_DEEPLINK_SCHEME || 'gia';
+const AUTH_DEEPLINK_HOST = process.env.AUTH0_DEEPLINK_HOST || 'auth';
+const AUTH_DEEPLINK_PATH = process.env.AUTH0_DEEPLINK_PATH || '/callback';
 
 const STORAGE_FILE_ENV = process.env.GIA_AUTH_STORAGE_FILE;
+let pendingDeepLinkAuth = null;
 
 function getStorageFile() {
-    return STORAGE_FILE_ENV || path.join(app.getPath('userData'), 'auth.tokens.json');
+	return STORAGE_FILE_ENV || path.join(app.getPath('userData'), 'auth.tokens.json');
 }
 
 function base64url(buf) {
-    return Buffer.from(buf)
-        .toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/g, '');
+	return Buffer.from(buf)
+		.toString('base64')
+		.replace(/\+/g, '-')
+		.replace(/\//g, '_')
+		.replace(/=+$/g, '');
 }
 
 function randomString(length = 64) {
-    // Allowed PKCE charset: ALPHA / DIGIT / "-" / "." / "_" / "~"
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-    const bytes = crypto.randomBytes(length);
-    let out = '';
-    for (let i = 0; i < length; i++) out += chars[bytes[i] % chars.length];
-    return out;
+	// Allowed PKCE charset: ALPHA / DIGIT / "-" / "." / "_" / "~"
+	const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+	const bytes = crypto.randomBytes(length);
+	let out = '';
+	for (let i = 0; i < length; i++) out += chars[bytes[i] % chars.length];
+	return out;
 }
 
 function buildRedirectUri(cfg = DEFAULTS) {
-    return `http://${cfg.redirectHost}:${cfg.redirectPort}${cfg.redirectPath}`;
+	return `http://${cfg.redirectHost}:${cfg.redirectPort}${cfg.redirectPath}`;
+}
+
+function buildDeepLinkRedirectUri() {
+	return `${DEEPLINK_SCHEME}://${AUTH_DEEPLINK_HOST}${AUTH_DEEPLINK_PATH}`;
+}
+
+function normalizeCallbackResult(url) {
+	return {
+		code: url.searchParams.get('code'),
+		state: url.searchParams.get('state'),
+		error: url.searchParams.get('error'),
+		errorDescription: url.searchParams.get('error_description'),
+	};
+}
+
+function cleanupPendingDeepLinkAuth() {
+	if (!pendingDeepLinkAuth) return;
+	clearTimeout(pendingDeepLinkAuth.timeout);
+	pendingDeepLinkAuth = null;
+}
+
+function waitForDeepLinkCallback({timeoutMs = 300000} = {}) {
+	if (pendingDeepLinkAuth) {
+		throw new Error('Another interactive login is already waiting for an auth callback');
+	}
+
+	return new Promise((resolve, reject) => {
+		const timeout = setTimeout(() => {
+			pendingDeepLinkAuth = null;
+			reject(new Error('Login callback timed out'));
+		}, timeoutMs);
+
+		pendingDeepLinkAuth = {
+			resolve: (result) => {
+				cleanupPendingDeepLinkAuth();
+				resolve(result);
+			},
+			reject: (error) => {
+				cleanupPendingDeepLinkAuth();
+				reject(error);
+			},
+			timeout,
+		};
+	});
+}
+
+export function consumeAuthCallbackUrl(rawUrl) {
+	try {
+		if (typeof rawUrl !== 'string' || rawUrl.length === 0) return false;
+		const url = new URL(rawUrl);
+		if (url.protocol !== `${DEEPLINK_SCHEME}:`) return false;
+		if ((url.hostname || '').toLowerCase() !== AUTH_DEEPLINK_HOST.toLowerCase()) return false;
+		if (url.pathname !== AUTH_DEEPLINK_PATH) return false;
+
+		if (!pendingDeepLinkAuth) {
+			return true;
+		}
+
+		pendingDeepLinkAuth.resolve(normalizeCallbackResult(url));
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 async function readStoredTokens() {
-    try {
-        const raw = await fs.readFile(getStorageFile(), 'utf8');
-        return JSON.parse(raw);
-    } catch {
-        return null;
-    }
+	try {
+		const raw = await fs.readFile(getStorageFile(), 'utf8');
+		return JSON.parse(raw);
+	} catch {
+		return null;
+	}
 }
 
 async function writeStoredTokens(tokens) {
-    const storageFile = getStorageFile();
-    await fs.mkdir(path.dirname(storageFile), { recursive: true });
-    const tmp = `${storageFile}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify(tokens, null, 2), {
-        encoding: 'utf8',
-        mode: 0o600,
-    });
-    await fs.rename(tmp, storageFile);
+	const storageFile = getStorageFile();
+	await fs.mkdir(path.dirname(storageFile), {recursive: true});
+	const tmp = `${storageFile}.tmp`;
+	await fs.writeFile(tmp, JSON.stringify(tokens, null, 2), {
+		encoding: 'utf8',
+		mode: 0o600,
+	});
+	await fs.rename(tmp, storageFile);
 }
 
 async function clearStoredTokens() {
-    try {
-        await fs.unlink(getStorageFile());
-    } catch {
-        // ignore
-    }
+	try {
+		await fs.unlink(getStorageFile());
+	} catch {
+		// ignore
+	}
 }
 
 function normalizeTokens(tokenResponse) {
-    const now = Date.now();
-    const expiresInSec =
-        typeof tokenResponse.expires_in === 'number' ? tokenResponse.expires_in : 0;
-    const expiresAt = now + expiresInSec * 1000;
+	const now = Date.now();
+	const expiresInSec =
+		typeof tokenResponse.expires_in === 'number' ? tokenResponse.expires_in : 0;
+	const expiresAt = now + expiresInSec * 1000;
 
-    return {
-        access_token: tokenResponse.access_token,
-        refresh_token: tokenResponse.refresh_token,
-        token_type: tokenResponse.token_type || 'Bearer',
-        scope: tokenResponse.scope,
-        expires_in: expiresInSec,
-        expires_at: expiresAt,
-        id_token: tokenResponse.id_token,
-    };
+	return {
+		access_token: tokenResponse.access_token,
+		refresh_token: tokenResponse.refresh_token,
+		token_type: tokenResponse.token_type || 'Bearer',
+		scope: tokenResponse.scope,
+		expires_in: expiresInSec,
+		expires_at: expiresAt,
+		id_token: tokenResponse.id_token,
+	};
 }
 
-async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs = 300000 }) {
-    return await new Promise((resolve, reject) => {
-        const server = http.createServer((req, res) => {
-            try {
-                const url = new URL(req.url || '', `http://${host}:${port}`);
-                if (url.pathname !== callbackPath) {
-                    res.writeHead(404);
-                    res.end('Not found');
-                    return;
-                }
+async function startLoopbackCallbackServer({host, port, callbackPath, timeoutMs = 300000}) {
+	return await new Promise((resolve, reject) => {
+		const server = http.createServer((req, res) => {
+			try {
+				const url = new URL(req.url || '', `http://${host}:${port}`);
+				if (url.pathname !== callbackPath) {
+					res.writeHead(404);
+					res.end('Not found');
+					return;
+				}
 
-                // Auth0 redirects with code/state or error/error_description
-                const code = url.searchParams.get('code');
-                const state = url.searchParams.get('state');
-                const error = url.searchParams.get('error');
-                const errorDescription = url.searchParams.get('error_description');
+				// Auth0 redirects with code/state or error/error_description
+				const code = url.searchParams.get('code');
+				const state = url.searchParams.get('state');
+				const error = url.searchParams.get('error');
+				const errorDescription = url.searchParams.get('error_description');
 
-                res.writeHead(200, {
-                    'Content-Type': 'text/html; charset=utf-8',
-                    'Cache-Control': 'no-store, no-cache',
-                });
+				res.writeHead(200, {
+					'Content-Type': 'text/html; charset=utf-8',
+					'Cache-Control': 'no-store, no-cache',
+					Connection: 'close',
+				});
 
-                const escapeHtml = (s) =>
-                    String(s ?? '')
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&#39;');
+				const escapeHtml = (s) =>
+					String(s ?? '')
+						.replace(/&/g, '&amp;')
+						.replace(/</g, '&lt;')
+						.replace(/>/g, '&gt;')
+						.replace(/"/g, '&quot;')
+						.replace(/'/g, '&#39;');
 
-                const openAppUrl = `${DEEPLINK_SCHEME}://open`;
+				const openAppUrl = `${DEEPLINK_SCHEME}://open`;
 
-                const page = ({ title, heading, body, variant = 'success' }) => {
-                    const safeTitle = escapeHtml(title);
-                    const safeHeading = escapeHtml(heading);
-                    return `<!doctype html>
+				const page = ({title, heading, body, variant = 'success'}) => {
+					const safeTitle = escapeHtml(title);
+					const safeHeading = escapeHtml(heading);
+					return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -300,10 +368,10 @@ async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs
       <div class="card">
         <div class="status-icon ${variant}">
           ${
-              variant === 'success'
-                  ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
-                  : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
-          }
+						variant === 'success'
+							? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+							: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
+					}
         </div>
         
         <h1>${safeHeading}</h1>
@@ -333,236 +401,250 @@ async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs
     </script>
   </body>
 </html>`;
-                };
+				};
 
-                if (error) {
-                    const safeDesc = escapeHtml(errorDescription || '');
-                    res.end(
-                        page({
-                            title: 'Login failed',
-                            heading: 'Login failed',
-                            variant: 'error',
-                            body: `<p>Something went wrong while signing in. Please try again from the Gia menu bar app.</p>${
-                                safeDesc ? `<pre>${safeDesc}</pre>` : ''
-                            }<p style="margin-top:16px;font-size:14px;color:var(--muted)">If this keeps happening, reach out to <a href="mailto:support@myagiea.com" style="color:var(--error)">support@myagiea.com</a></p>`,
-                        }),
-                    );
-                } else {
-                    res.end(
-                        page({
-                            title: 'Login complete',
-                            heading: 'Login complete',
-                            variant: 'success',
-                            body: `<p>You’re signed in. Return to Gia to continue setup.</p>`,
-                        }),
-                    );
-                }
+				if (error === 'login_required' || error === 'interaction_required') {
+					// Silent auth failed — user needs to log in interactively.
+					// Show a brief message and auto-close so the interactive tab takes over.
+					res.end(`<!doctype html><html><head><title>Redirecting…</title></head><body>
+                        <p style="font-family:sans-serif;text-align:center;margin-top:40vh;color:#6b7280">Opening login…</p>
+                        <script>setTimeout(function(){window.close()},1500)</script></body></html>`);
+				} else if (error) {
+					const safeDesc = escapeHtml(errorDescription || '');
+					res.end(
+						page({
+							title: 'Login failed',
+							heading: 'Login failed',
+							variant: 'error',
+							body: `<p>Something went wrong while signing in. Please try again from the Gia menu bar app.</p>${
+								safeDesc ? `<pre>${safeDesc}</pre>` : ''
+							}<p style="margin-top:16px;font-size:14px;color:var(--muted)">If this keeps happening, reach out to <a href="mailto:support@myagiea.com" style="color:var(--error)">support@myagiea.com</a></p>`,
+						}),
+					);
+				} else {
+					res.end(
+						page({
+							title: 'Login complete',
+							heading: 'Login complete',
+							variant: 'success',
+							body: `<p>You’re signed in. Return to Gia to continue setup.</p>`,
+						}),
+					);
+				}
 
-                clearTimeout(timeout);
-                resolve({ code, state, error, errorDescription });
-            } catch (e) {
-                clearTimeout(timeout);
-                reject(e);
-            } finally {
-                // close shortly after responding
-                setTimeout(() => {
-                    try {
-                        server.close();
-                    } catch {
-                        // ignore
-                    }
-                }, 25);
-            }
-        });
+				clearTimeout(timeout);
+				const result = {code, state, error, errorDescription};
+				// Close the server and wait for the port to be released
+				// before resolving, so a subsequent login() can reuse the port.
+				server.close(() => resolve(result));
+			} catch (e) {
+				clearTimeout(timeout);
+				server.close(() => reject(e));
+			}
+		});
 
-        const timeout = setTimeout(() => {
-            try {
-                server.close();
-            } catch {}
-            reject(new Error('Login callback timed out'));
-        }, timeoutMs);
+		const timeout = setTimeout(() => {
+			try {
+				server.close();
+			} catch {
+			}
+			reject(new Error('Login callback timed out'));
+		}, timeoutMs);
 
-        server.on('error', (err) => {
-            clearTimeout(timeout);
-            reject(err);
-        });
-        server.listen(port, host);
-    });
+		server.on('error', (err) => {
+			clearTimeout(timeout);
+			reject(err);
+		});
+		server.listen(port, host);
+	});
 }
 
-async function exchangeCodeForTokens({ domain, clientId, redirectUri, codeVerifier, code }) {
-    const tokenRes = await fetch(`https://${domain}/oauth/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            grant_type: 'authorization_code',
-            client_id: clientId,
-            code_verifier: codeVerifier,
-            code,
-            redirect_uri: redirectUri,
-        }),
-        signal: AbortSignal.timeout(30000),
-    });
+async function exchangeCodeForTokens({domain, clientId, redirectUri, codeVerifier, code}) {
+	const tokenRes = await fetch(`https://${domain}/oauth/token`, {
+		method: 'POST',
+		headers: {'Content-Type': 'application/json'},
+		body: JSON.stringify({
+			grant_type: 'authorization_code',
+			client_id: clientId,
+			code_verifier: codeVerifier,
+			code,
+			redirect_uri: redirectUri,
+		}),
+		signal: AbortSignal.timeout(30000),
+	});
 
-    const bodyText = await tokenRes.text();
-    if (!tokenRes.ok) throw new Error(`Token exchange failed: ${bodyText}`);
-    return JSON.parse(bodyText);
+	const bodyText = await tokenRes.text();
+	if (!tokenRes.ok) throw new Error(`Token exchange failed: ${bodyText}`);
+	return JSON.parse(bodyText);
 }
 
-async function refreshAccessToken({ domain, clientId, refreshToken }) {
-    const tokenRes = await fetch(`https://${domain}/oauth/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            grant_type: 'refresh_token',
-            client_id: clientId,
-            refresh_token: refreshToken,
-        }),
-        signal: AbortSignal.timeout(30000),
-    });
+async function refreshAccessToken({domain, clientId, refreshToken}) {
+	const tokenRes = await fetch(`https://${domain}/oauth/token`, {
+		method: 'POST',
+		headers: {'Content-Type': 'application/json'},
+		body: JSON.stringify({
+			grant_type: 'refresh_token',
+			client_id: clientId,
+			refresh_token: refreshToken,
+		}),
+		signal: AbortSignal.timeout(30000),
+	});
 
-    const bodyText = await tokenRes.text();
-    if (!tokenRes.ok) throw new Error(`Refresh failed: ${bodyText}`);
-    return JSON.parse(bodyText);
+	const bodyText = await tokenRes.text();
+	if (!tokenRes.ok) throw new Error(`Refresh failed: ${bodyText}`);
+	return JSON.parse(bodyText);
 }
 
-export async function getStoredAccessToken({ allowRefresh = true } = {}) {
-    const stored = await readStoredTokens();
-    if (!stored) return null;
+export async function getStoredAccessToken({allowRefresh = true} = {}) {
+	const stored = await readStoredTokens();
+	if (!stored) return null;
 
-    // Valid, non-expired access token — return immediately.
-    if (stored.access_token && stored.expires_at && Date.now() < stored.expires_at) {
-        return stored;
-    }
+	// Valid, non-expired access token — return immediately.
+	if (stored.access_token && stored.expires_at && Date.now() < stored.expires_at) {
+		return stored;
+	}
 
-    // No refresh path available — nothing we can do.
-    if (!allowRefresh || !stored.refresh_token) return null;
+	// No refresh path available — nothing we can do.
+	if (!allowRefresh || !stored.refresh_token) return null;
 
-    // attempt refresh
-    try {
-        const refreshed = await refreshAccessToken({
-            domain: stored.domain || DEFAULTS.domain,
-            clientId: stored.client_id || DEFAULTS.clientId,
-            refreshToken: stored.refresh_token,
-        });
+	// attempt refresh
+	try {
+		const refreshed = await refreshAccessToken({
+			domain: stored.domain || DEFAULTS.domain,
+			clientId: stored.client_id || DEFAULTS.clientId,
+			refreshToken: stored.refresh_token,
+		});
 
-        const next = {
-            ...normalizeTokens(refreshed),
-            // keep config so refresh works later
-            domain: stored.domain || DEFAULTS.domain,
-            client_id: stored.client_id || DEFAULTS.clientId,
-            audience: stored.audience || DEFAULTS.audience,
-            scopes: stored.scopes || DEFAULTS.scopes,
-            redirect_uri: stored.redirect_uri || buildRedirectUri(DEFAULTS),
-        };
+		const next = {
+			...normalizeTokens(refreshed),
+			// keep config so refresh works later
+			domain: stored.domain || DEFAULTS.domain,
+			client_id: stored.client_id || DEFAULTS.clientId,
+			audience: stored.audience || DEFAULTS.audience,
+			scopes: stored.scopes || DEFAULTS.scopes,
+			redirect_uri: stored.redirect_uri || buildRedirectUri(DEFAULTS),
+		};
 
-        // Auth0 may omit refresh_token on refresh depending on settings
-        if (!next.refresh_token) next.refresh_token = stored.refresh_token;
+		// Auth0 may omit refresh_token on refresh depending on settings
+		if (!next.refresh_token) next.refresh_token = stored.refresh_token;
 
-        await writeStoredTokens(next);
-        return next;
-    } catch (e) {
-        // Preserve the refresh_token so the next attempt can retry.
-        // Only wipe everything when there's no refresh_token left to try.
-        if (stored.refresh_token) {
-            await writeStoredTokens({
-                ...stored,
-                access_token: null,
-                expires_at: 0,
-            });
-        } else {
-            await clearStoredTokens();
-        }
-        throw e;
-    }
+		await writeStoredTokens(next);
+		return next;
+	} catch (e) {
+		// Preserve the refresh_token so the next attempt can retry.
+		// Only wipe everything when there's no refresh_token left to try.
+		if (stored.refresh_token) {
+			await writeStoredTokens({
+				...stored,
+				access_token: null,
+				expires_at: 0,
+			});
+		} else {
+			await clearStoredTokens();
+		}
+		throw e;
+	}
 }
 
 export async function login({
-    domain = DEFAULTS.domain,
-    clientId = DEFAULTS.clientId,
-    audience = DEFAULTS.audience,
-    scopes = DEFAULTS.scopes,
-    prompt = 'login', // "none" for silent attempt
-} = {}) {
-    await app.whenReady();
-    const requestedScopes = ensureRequiredScopes(scopes);
+															domain = DEFAULTS.domain,
+															clientId = DEFAULTS.clientId,
+															audience = DEFAULTS.audience,
+															scopes = DEFAULTS.scopes,
+															prompt = 'login', // "none" for silent attempt
+														} = {}) {
+	await app.whenReady();
+	const requestedScopes = ensureRequiredScopes(scopes);
+	const useDeepLinkCallback = prompt === 'none';
+	const redirectUri = useDeepLinkCallback
+		? buildDeepLinkRedirectUri()
+		: buildRedirectUri(DEFAULTS);
 
-    const redirectUri = buildRedirectUri(DEFAULTS);
+	const state = crypto.randomUUID();
+	const codeVerifier = randomString(64);
+	const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
 
-    const state = crypto.randomUUID();
-    const codeVerifier = randomString(64);
-    const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
+	const authUrl =
+		`https://${domain}/authorize?` +
+		new URLSearchParams({
+			client_id: clientId,
+			response_type: 'code',
+			redirect_uri: redirectUri,
+			audience,
+			scope: requestedScopes,
+			state,
+			code_challenge: codeChallenge,
+			code_challenge_method: 'S256',
+			prompt,
+		}).toString();
 
-    const authUrl =
-        `https://${domain}/authorize?` +
-        new URLSearchParams({
-            client_id: clientId,
-            response_type: 'code',
-            redirect_uri: redirectUri,
-            audience,
-            scope: requestedScopes,
-            state,
-            code_challenge: codeChallenge,
-            code_challenge_method: 'S256',
-            prompt,
-        }).toString();
+	// Use a browser-visible loopback page for interactive sign-in so the browser
+	// shows a completion page, while silent auth can return straight to the app.
+	const callbackPromise = useDeepLinkCallback
+		? waitForDeepLinkCallback({
+			timeoutMs: 15000,
+		})
+		: startLoopbackCallbackServer({
+			host: DEFAULTS.redirectHost,
+			port: DEFAULTS.redirectPort,
+			callbackPath: DEFAULTS.redirectPath,
+			timeoutMs: 300000,
+		});
 
-    // Start the loopback server to receive the callback.
-    // Silent auth (prompt=none) gets a shorter timeout since Auth0 redirects instantly.
-    const callbackPromise = startLoopbackCallbackServer({
-        host: DEFAULTS.redirectHost,
-        port: DEFAULTS.redirectPort,
-        callbackPath: DEFAULTS.redirectPath,
-        timeoutMs: prompt === 'none' ? 15000 : 300000,
-    });
+	// Open auth URL in the system default browser
+	try {
+		await shell.openExternal(authUrl);
+	} catch (error) {
+		if (useDeepLinkCallback && pendingDeepLinkAuth) {
+			pendingDeepLinkAuth.reject(error);
+		}
+		throw error;
+	}
 
-    // Open auth URL in the system default browser
-    await shell.openExternal(authUrl);
+	// Wait for the callback from the browser
+	const callback = await callbackPromise;
 
-    // Wait for the callback from the browser
-    const callback = await callbackPromise;
+	if (callback?.error) {
+		throw new Error(
+			`Auth error: ${callback.error}${
+				callback.errorDescription ? ` (${callback.errorDescription})` : ''
+			}`,
+		);
+	}
 
-    if (callback?.error) {
-        throw new Error(
-            `Auth error: ${callback.error}${
-                callback.errorDescription ? ` (${callback.errorDescription})` : ''
-            }`,
-        );
-    }
+	if (!callback?.code) throw new Error('No authorization code returned');
+	if (!callback?.state || callback.state !== state) throw new Error('Invalid OAuth state');
 
-    if (!callback?.code) throw new Error('No authorization code returned');
-    if (!callback?.state || callback.state !== state) throw new Error('Invalid OAuth state');
+	const tokenResponse = await exchangeCodeForTokens({
+		domain,
+		clientId,
+		redirectUri,
+		codeVerifier,
+		code: callback.code,
+	});
 
-    const tokenResponse = await exchangeCodeForTokens({
-        domain,
-        clientId,
-        redirectUri,
-        codeVerifier,
-        code: callback.code,
-    });
+	const normalized = {
+		...normalizeTokens(tokenResponse),
+		domain,
+		client_id: clientId,
+		audience,
+		scopes: requestedScopes,
+		redirect_uri: redirectUri,
+	};
 
-    const normalized = {
-        ...normalizeTokens(tokenResponse),
-        domain,
-        client_id: clientId,
-        audience,
-        scopes: requestedScopes,
-        redirect_uri: redirectUri,
-    };
-
-    await writeStoredTokens(normalized);
-    return normalized;
+	await writeStoredTokens(normalized);
+	return normalized;
 }
 
 export async function logout() {
-    await clearStoredTokens();
+	await clearStoredTokens();
 }
 
 export async function isAuthenticated() {
-    try {
-        const t = await getStoredAccessToken({ allowRefresh: false });
-        return { authenticated: !!t, accessToken: t?.access_token || null };
-    } catch {
-        return { authenticated: false, accessToken: null };
-    }
+	try {
+		const t = await getStoredAccessToken({allowRefresh: false});
+		return {authenticated: !!t, accessToken: t?.access_token || null};
+	} catch {
+		return {authenticated: false, accessToken: null};
+	}
 }
