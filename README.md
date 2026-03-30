@@ -72,8 +72,10 @@ Optional:
 - `GIA_MAC_SIGN=1` - Enable macOS code signing
 - `START_ON_LOGIN=false` - Disable launching Gia automatically when the user logs in
 
+## Release Packaging for macOS
 
-```
+```shell 
+
 # Build DMG file
 GIA_MAC_SIGN=1 npm run make
 
@@ -81,7 +83,12 @@ GIA_MAC_SIGN=1 npm run make
 xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile "gia-notarize" --wait
 xcrun stapler staple ./out/make/Gia-*.dmg
 xcrun stapler validate ./out/make/Gia-*.dmg
+```
 
-# Command to create zip of the codebase - for Windows exe
+## Release Packaging for Windows
+
+```shell
+
+# Zip folder for Windows release
 zip -r gia-desktop-recording.zip . -x "node_modules/*" "build/*" "out/*" ".git/*" ".DS_Store" ".env*"
 ```
