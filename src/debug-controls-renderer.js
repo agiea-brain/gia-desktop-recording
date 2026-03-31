@@ -1,9 +1,9 @@
-const { ipcRenderer } = require("electron");
+const api = window.electronAPI;
 
-const statusEl = document.getElementById("status");
-const pauseBtn = document.getElementById("pauseBtn");
-const stopBtn = document.getElementById("stopBtn");
-const windowIdEl = document.getElementById("windowId");
+const statusEl = document.getElementById('status');
+const pauseBtn = document.getElementById('pauseBtn');
+const stopBtn = document.getElementById('stopBtn');
+const windowIdEl = document.getElementById('windowId');
 
 let state = { recording: false, paused: false, windowId: null };
 
@@ -11,48 +11,47 @@ function render(next) {
     state = next || state;
 
     const { recording, paused, windowId } = state;
-    const status = !recording ? "Idle" : paused ? "Paused" : "Recording";
+    const status = !recording ? 'Idle' : paused ? 'Paused' : 'Recording';
 
     statusEl.textContent = `Status: ${status}`;
-    windowIdEl.textContent = windowId ?? "—";
+    windowIdEl.textContent = windowId ?? '—';
 
     pauseBtn.disabled = !recording;
     stopBtn.disabled = !recording;
 
-    pauseBtn.textContent = paused ? "Resume Recording" : "Pause Recording";
+    pauseBtn.textContent = paused ? 'Resume Recording' : 'Pause Recording';
 }
 
 async function refresh() {
     try {
-        const next = await ipcRenderer.invoke("debug-controls:get-state");
+        const next = await api.getState();
         render(next);
     } catch {
         // ignore
     }
 }
 
-pauseBtn.addEventListener("click", async () => {
+pauseBtn.addEventListener('click', async () => {
     pauseBtn.disabled = true;
     try {
-        await ipcRenderer.invoke("debug-controls:toggle-pause");
+        await api.togglePause();
     } finally {
         await refresh();
     }
 });
 
-stopBtn.addEventListener("click", async () => {
+stopBtn.addEventListener('click', async () => {
     stopBtn.disabled = true;
     try {
-        await ipcRenderer.invoke("debug-controls:stop");
+        await api.stop();
     } finally {
         // main process will close the window; keep UI consistent while waiting
         await refresh();
     }
 });
 
-ipcRenderer.on("debug-controls:state", (_evt, next) => {
+api.onState((next) => {
     render(next);
 });
 
 refresh();
-

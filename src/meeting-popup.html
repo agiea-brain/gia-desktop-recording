@@ -1,7 +1,11 @@
 <!doctype html>
-<html>
+<html lang="en">
     <head>
         <meta charset="UTF-8" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+        />
         <meta name="application-name" content="Gia" />
         <title>Record Meeting?</title>
         <style>
@@ -29,16 +33,18 @@
                 padding: 0;
                 box-sizing: border-box;
             }
-            
+
             body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                font-family:
+                    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+                    sans-serif;
                 background: var(--background);
                 color: var(--foreground);
                 overflow: hidden;
                 -webkit-font-smoothing: antialiased;
                 -moz-osx-font-smoothing: grayscale;
             }
-            
+
             .titlebar {
                 height: 36px;
                 background: var(--background);
@@ -48,13 +54,13 @@
                 padding: 0 12px;
                 -webkit-app-region: drag;
             }
-            
+
             .window-controls {
                 display: flex;
                 gap: 8px;
                 -webkit-app-region: no-drag;
             }
-            
+
             .window-btn {
                 width: 12px;
                 height: 12px;
@@ -71,15 +77,15 @@
                 -webkit-appearance: none;
                 appearance: none;
             }
-            
+
             .window-btn:hover {
                 opacity: 0.8;
             }
-            
+
             .btn-minimize {
                 background: #febc2e;
             }
-            
+
             .container {
                 padding: 24px;
                 -webkit-app-region: no-drag;
@@ -99,21 +105,21 @@
                 object-fit: contain;
                 flex: 0 0 auto;
             }
-            
+
             h1 {
                 font-size: 18px;
                 font-weight: 600;
                 color: var(--foreground);
                 letter-spacing: -0.025em;
             }
-            
+
             p {
                 font-size: 14px;
                 color: var(--muted-foreground);
                 margin-bottom: 24px;
                 line-height: 1.5;
             }
-            
+
             .recording-status {
                 display: none;
                 align-items: center;
@@ -127,11 +133,11 @@
                 font-size: 14px;
                 font-weight: 500;
             }
-            
+
             .recording-status.active {
                 display: flex;
             }
-            
+
             .recording-indicator {
                 width: 8px;
                 height: 8px;
@@ -139,17 +145,22 @@
                 background: var(--destructive);
                 animation: pulse 1.5s ease-in-out infinite;
             }
-            
+
             @keyframes pulse {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.4; }
+                0%,
+                100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.4;
+                }
             }
-            
+
             .button-group {
                 display: flex;
                 gap: 10px;
             }
-            
+
             button {
                 padding: 10px 20px;
                 border-radius: var(--radius);
@@ -162,55 +173,55 @@
                 align-items: center;
                 justify-content: center;
             }
-            
+
             .btn-primary {
                 background: var(--primary);
                 color: var(--primary-foreground);
                 border: 1px solid var(--primary);
             }
-            
+
             .btn-primary:hover:not(:disabled) {
                 background: hsl(0, 0%, 15%);
                 border-color: hsl(0, 0%, 15%);
             }
-            
+
             .btn-primary:focus-visible {
                 outline: 2px solid var(--ring);
                 outline-offset: 2px;
             }
-            
+
             .btn-secondary {
                 background: var(--background);
                 color: var(--foreground);
                 border: 1px solid var(--border);
             }
-            
+
             .btn-secondary:hover:not(:disabled) {
                 background: var(--secondary);
                 border-color: var(--input);
             }
-            
+
             .btn-secondary:focus-visible {
                 outline: 2px solid var(--ring);
                 outline-offset: 2px;
             }
-            
+
             .btn-destructive {
                 background: var(--destructive);
                 color: var(--destructive-foreground);
                 border: 1px solid var(--destructive);
             }
-            
+
             .btn-destructive:hover:not(:disabled) {
                 background: hsl(0, 84.2%, 50%);
                 border-color: hsl(0, 84.2%, 50%);
             }
-            
+
             .btn-destructive:focus-visible {
                 outline: 2px solid var(--ring);
                 outline-offset: 2px;
             }
-            
+
             button:disabled {
                 opacity: 0.5;
                 cursor: not-allowed;
@@ -227,7 +238,9 @@
             }
 
             @keyframes spin {
-                to { transform: rotate(360deg); }
+                to {
+                    transform: rotate(360deg);
+                }
             }
         </style>
     </head>
@@ -237,41 +250,34 @@
                 <button class="window-btn btn-minimize" id="minimizeBtn" title="Minimize"></button>
             </div>
         </div>
-        
+
         <div class="container">
             <div class="header-row">
-                <img class="gia-logo" id="giaLogo" alt="Gia" />
+                <img class="gia-logo" id="giaLogo" alt="Gia" src="" />
                 <h1 id="title">Record this meeting?</h1>
             </div>
             <p id="message">A meeting has been detected. Would you like Gia to record it?</p>
-            
+
             <div class="recording-status" id="recordingStatus">
                 <div class="recording-indicator"></div>
                 <span>Recording in progress</span>
             </div>
-            
+
             <div class="button-group" id="initialButtons">
                 <button class="btn-secondary" id="declineBtn">No thanks</button>
                 <button class="btn-primary" id="confirmBtn">Start recording</button>
             </div>
-            
-            <div class="button-group" id="recordingButtons" style="display: none;">
+
+            <div class="button-group" id="recordingButtons" style="display: none">
                 <button class="btn-destructive" id="endBtn">End Recording</button>
             </div>
         </div>
-        
+
         <script>
-            const { ipcRenderer } = require('electron');
+            const api = window.electronAPI;
 
             // Route popup logs through main-process Logfire.
             (() => {
-                const send = (level, ...args) =>
-                    ipcRenderer.send("app-log", {
-                        level,
-                        args,
-                        context: { source: "meeting-popup" },
-                    });
-
                 const original = {
                     log: console.log?.bind(console),
                     info: console.info?.bind(console),
@@ -282,26 +288,26 @@
 
                 console.log = (...args) => {
                     original.log?.(...args);
-                    send("info", ...args);
+                    api.log('info', ...args);
                 };
                 console.info = (...args) => {
                     original.info?.(...args);
-                    send("info", ...args);
+                    api.log('info', ...args);
                 };
                 console.warn = (...args) => {
                     original.warn?.(...args);
-                    send("warn", ...args);
+                    api.log('warn', ...args);
                 };
                 console.error = (...args) => {
                     original.error?.(...args);
-                    send("error", ...args);
+                    api.log('error', ...args);
                 };
                 console.debug = (...args) => {
                     original.debug?.(...args);
-                    send("debug", ...args);
+                    api.log('debug', ...args);
                 };
             })();
-            
+
             const titleEl = document.getElementById('title');
             const messageEl = document.getElementById('message');
             const recordingStatusEl = document.getElementById('recordingStatus');
@@ -312,24 +318,24 @@
             const declineBtn = document.getElementById('declineBtn');
             const endBtn = document.getElementById('endBtn');
             const minimizeBtn = document.getElementById('minimizeBtn');
-            
+
             let isRecording = false;
-            
+
             // Window controls
             minimizeBtn.addEventListener('click', () => {
-                ipcRenderer.invoke('meeting-popup:minimize');
+                api.minimize();
             });
-            
+
             // Handle confirm button
             confirmBtn.addEventListener('click', async () => {
                 if (isRecording) return;
-                
+
                 confirmBtn.disabled = true;
                 declineBtn.disabled = true;
                 confirmBtn.innerHTML = '<div class="spinner"></div>Starting...';
-                
+
                 try {
-                    await ipcRenderer.invoke('meeting-popup:confirm-recording');
+                    await api.confirmRecording();
                 } catch (error) {
                     console.error('Error starting recording:', error);
                     confirmBtn.disabled = false;
@@ -337,31 +343,31 @@
                     confirmBtn.textContent = 'Start recording';
                 }
             });
-            
+
             // Handle decline button
             declineBtn.addEventListener('click', async () => {
                 if (isRecording) return;
-                await ipcRenderer.invoke('meeting-popup:decline-recording');
+                await api.declineRecording();
             });
-            
+
             // Handle end recording button
             endBtn.addEventListener('click', async () => {
                 if (!isRecording) return;
-                
+
                 endBtn.disabled = true;
                 endBtn.innerHTML = '<div class="spinner"></div>Stopping...';
-                
+
                 try {
-                    await ipcRenderer.invoke('meeting-popup:end-recording');
+                    await api.endRecording();
                 } catch (error) {
                     console.error('Error ending recording:', error);
                     endBtn.disabled = false;
                     endBtn.textContent = 'End Recording';
                 }
             });
-            
+
             // Listen for recording state changes
-            ipcRenderer.on('meeting-popup:recording-started', () => {
+            api.onRecordingStarted(() => {
                 isRecording = true;
                 titleEl.textContent = 'Recording';
                 messageEl.style.display = 'none';
@@ -373,7 +379,7 @@
             });
 
             // Receive the Gia logo from main (data URL), so it works in packaged builds.
-            ipcRenderer.on('meeting-popup:logo', (_event, payload) => {
+            api.onLogo((payload) => {
                 const dataUrl = payload?.dataUrl;
                 if (typeof dataUrl === 'string' && dataUrl.length > 0) {
                     giaLogoEl.src = dataUrl;
@@ -382,8 +388,8 @@
                     giaLogoEl.style.display = 'none';
                 }
             });
-            
-            ipcRenderer.on('meeting-popup:recording-ended', () => {
+
+            api.onRecordingEnded(() => {
                 // Window will be closed by main process
             });
         </script>

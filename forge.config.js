@@ -1,25 +1,28 @@
-const { FusesPlugin } = require("@electron-forge/plugin-fuses");
-const { FuseV1Options, FuseVersion } = require("@electron/fuses");
+const { FusesPlugin } = require('@electron-forge/plugin-fuses');
+const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
-const SHOULD_SIGN_MAC = process.env.GIA_MAC_SIGN === "1";
-const SHOULD_NOTARIZE_MAC = process.env.GIA_MAC_NOTARIZE === "1";
-const MAC_BUNDLE_ID =
-    process.env.GIA_MAC_BUNDLE_ID || "com.gia.desktop-recording";
+const SHOULD_SIGN_MAC = process.env.GIA_MAC_SIGN === '1';
+const MAC_BUNDLE_ID = process.env.GIA_MAC_BUNDLE_ID || 'com.gia.desktop-recording';
 
 module.exports = {
     packagerConfig: {
-        name: "Gia",
+        name: 'Gia',
         appBundleId: MAC_BUNDLE_ID,
         asar: {
-            unpackDir: "node_modules/@recallai",
+            unpackDir: 'node_modules/@recallai',
         },
         // Ensure the tray icon and popup HTML are available at runtime when packaged.
         extraResource: [
-            "./src/assets/gia-tray.png",
-            "./src/meeting-popup.html",
-            "./src/onboarding-popup.html",
-            "./src/debug-controls.html",
-            "./src/debug-controls-renderer.js",
+            './src/assets/gia-tray.png',
+            './src/assets/gia-app.icns',
+            './src/assets/gia-app.ico',
+            './src/meeting-popup.html',
+            './src/onboarding-popup.html',
+            './src/debug-controls.html',
+            './src/debug-controls-renderer.js',
+            './src/meeting-popup-preload.js',
+            './src/onboarding-preload.js',
+            './src/debug-controls-preload.js',
         ],
         // Local packaging/dev: don't require code signing unless explicitly enabled.
         // Enable signing by running with: GIA_MAC_SIGN=1 npm run package
@@ -27,14 +30,13 @@ module.exports = {
             ? {
                   continueOnError: false,
                   identity:
-                      process.env.GIA_MAC_SIGN_IDENTITY ||
-                      undefined /* auto-detect if omitted */,
+                      process.env.GIA_MAC_SIGN_IDENTITY || undefined /* auto-detect if omitted */,
                   keychain: process.env.GIA_MAC_KEYCHAIN || undefined,
                   optionsForFile: (_) => {
                       return {
-                          entitlements: "./Entitlements.plist",
-                          "entitlements-inherit": "./Entitlements.plist",
-                          "hardened-runtime": true,
+                          entitlements: './Entitlements.plist',
+                          'entitlements-inherit': './Entitlements.plist',
+                          'hardened-runtime': true,
                           hardenedRuntime: true,
                       };
                   },
@@ -51,29 +53,35 @@ module.exports = {
         //           }
         //         : false,
         // App icon (macOS .icns). Forge expects the path WITHOUT the extension.
-        icon: "./src/assets/gia-app",
+        icon: './src/assets/gia-app',
         extendInfo: {
-            NSUserNotificationAlertStyle: "alert",
-            CFBundleName: "Gia",
-            CFBundleDisplayName: "Gia",
+            NSUserNotificationAlertStyle: 'alert',
+            CFBundleName: 'Gia',
+            CFBundleDisplayName: 'Gia',
         },
     },
     rebuildConfig: {},
     makers: [
         {
-            name: "@electron-forge/maker-dmg",
+            name: '@electron-forge/maker-dmg',
             config: {
-                icon: "./src/assets/gia-app.icns",
+                icon: './src/assets/gia-app.icns',
             },
         },
         {
-            name: "@electron-forge/maker-zip",
-            platforms: ["darwin"],
+            name: '@electron-forge/maker-zip',
+            platforms: ['darwin'],
         },
-        // {
-        //   name: '@electron-forge/maker-squirrel',
-        //   config: {},
-        // },
+        {
+            name: '@electron-forge/maker-squirrel',
+            config: {
+                name: 'Gia',
+                iconUrl:
+                    'https://raw.githubusercontent.com/agiea-brain/gia-desktop-recording/main/src/assets/gia-app.ico',
+                setupIcon: './src/assets/gia-app.ico',
+                loadingGif: './src/assets/gia-installer.gif',
+            },
+        },
         // {
         //   name: '@electron-forge/maker-deb',
         //   config: {},
@@ -85,24 +93,34 @@ module.exports = {
     ],
     plugins: [
         {
-            name: "@electron-forge/plugin-auto-unpack-natives",
+            name: '@electron-forge/plugin-auto-unpack-natives',
             config: {},
         },
         {
-            name: "@electron-forge/plugin-webpack",
+            name: '@electron-forge/plugin-webpack',
             config: {
                 devContentSecurityPolicy:
                     "default-src * 'unsafe-inline' 'unsafe-eval' data: blob: filesystem: mediastream: file:;",
-                mainConfig: "./webpack.main.config.js",
+                mainConfig: './webpack.main.config.js',
                 renderer: {
-                    config: "./webpack.renderer.config.js",
+                    config: './webpack.renderer.config.js',
                     entryPoints: [
                         {
-                            html: "./src/index.html",
-                            js: "./src/renderer.js",
-                            name: "main_window",
+                            name: 'meeting-popup',
                             preload: {
-                                js: "./src/preload.js",
+                                js: './src/meeting-popup-preload.js',
+                            },
+                        },
+                        {
+                            name: 'onboarding-popup',
+                            preload: {
+                                js: './src/onboarding-preload.js',
+                            },
+                        },
+                        {
+                            name: 'debug-controls',
+                            preload: {
+                                js: './src/debug-controls-preload.js',
                             },
                         },
                     ],
@@ -110,9 +128,9 @@ module.exports = {
             },
         },
         {
-            name: "@timfish/forge-externals-plugin",
+            name: '@timfish/forge-externals-plugin',
             config: {
-                externals: ["@recallai/desktop-sdk"],
+                externals: ['@recallai/desktop-sdk'],
                 includeDeps: true,
             },
         },

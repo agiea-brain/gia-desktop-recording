@@ -1,14 +1,14 @@
-import * as fs from "fs";
-import * as path from "path";
-import * as dotenv from "dotenv";
-import { fileURLToPath } from "url";
+import * as fs from 'fs';
+import * as path from 'path';
+import * as dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
 
 let loaded = false;
 let loadedFromPath = null;
 
 function safeExists(p) {
     try {
-        return typeof p === "string" && p.length > 0 && fs.existsSync(p);
+        return typeof p === 'string' && p.length > 0 && fs.existsSync(p);
     } catch {
         return false;
     }
@@ -61,11 +61,11 @@ export function loadEnv() {
     // 1) From current working directory upward (works for many dev flows)
     try {
         const cwd = process.cwd();
-        const rootFromCwd = findUp(cwd, "package.json", 10);
+        const rootFromCwd = findUp(cwd, 'package.json', 10);
         if (rootFromCwd) {
-            candidates.push(path.join(path.dirname(rootFromCwd), ".env"));
+            candidates.push(path.join(path.dirname(rootFromCwd), '.env'));
         }
-        candidates.push(path.join(cwd, ".env"));
+        candidates.push(path.join(cwd, '.env'));
     } catch {
         // ignore
     }
@@ -73,16 +73,16 @@ export function loadEnv() {
     // 2) From this module's location upward (works when cwd is not project root)
     const moduleDir = getModuleDirname();
     if (moduleDir) {
-        const rootFromModule = findUp(moduleDir, "package.json", 10);
+        const rootFromModule = findUp(moduleDir, 'package.json', 10);
         if (rootFromModule) {
-            candidates.push(path.join(path.dirname(rootFromModule), ".env"));
+            candidates.push(path.join(path.dirname(rootFromModule), '.env'));
         }
     }
 
     // 3) Packaged apps can optionally ship a `.env` as an extraResource.
     // Electron sets `process.resourcesPath` at runtime (only if running under Electron).
-    if (typeof process.resourcesPath === "string") {
-        candidates.push(path.join(process.resourcesPath, ".env"));
+    if (typeof process.resourcesPath === 'string') {
+        candidates.push(path.join(process.resourcesPath, '.env'));
     }
 
     for (const p of candidates) {
@@ -98,4 +98,3 @@ export function loadEnv() {
     loadedFromPath = null;
     return { loaded: true, path: loadedFromPath };
 }
-

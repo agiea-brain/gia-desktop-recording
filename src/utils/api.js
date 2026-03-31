@@ -1,56 +1,68 @@
-import { loadEnv } from "./load-env";
-import logger from "./logger";
+import { loadEnv } from './load-env';
+import logger from './logger';
 
 // Ensure env is loaded even when cwd isn't repo root.
 loadEnv();
 
 const apiRoutes = {
-    getUploadToken: "/api/content/recall/upload-token/",
-    registerMeetingUrl: "/api/content/recall/register-meeting-url/",
-    getUserProfile: "/api/users/profile",
-    updateDesktopSdkDiagnostics: "/api/users/desktop-sdk-diagnostics",
+    getUploadToken: '/api/content/recall/upload-token/',
+    registerMeetingUrl: '/api/content/recall/register-meeting-url/',
+    getUserProfile: '/api/users/profile',
+    updateDesktopSdkDiagnostics: '/api/users/desktop-sdk-diagnostics',
 };
 
 class Api {
     constructor() {
-        this.apiUrl = "https://api.myagiea.com";
+        this.apiUrl = 'https://api.myagiea.com';
         // this.apiUrl =
         //     "https://r0ng0htend.execute-api.us-east-2.amazonaws.com/stage";
         this.authToken = null;
+        this.onAuthExpired = null;
     }
 
     setAuthToken(authToken) {
         this.authToken = authToken;
     }
 
+    _handleUnauthorized(status) {
+        if (status === 401 && this.onAuthExpired) {
+            this.authToken = null;
+            this.onAuthExpired();
+        }
+    }
+
+    async _fetch(url, options, { timeoutMs = 60000 } = {}) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            return await fetch(url, { ...options, signal: controller.signal });
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
     async getUploadToken() {
         if (!this.authToken) {
-            throw new Error("Missing auth token (call setAuthToken first)");
+            throw new Error('Missing auth token (call setAuthToken first)');
         }
-        const response = await fetch(
-            `${this.apiUrl}${apiRoutes.getUploadToken}`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json",
-                    Authorization: `Bearer ${this.authToken}`,
-                },
+        const response = await this._fetch(`${this.apiUrl}${apiRoutes.getUploadToken}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                Authorization: `Bearer ${this.authToken}`,
             },
-        );
+        });
         if (!response.ok) {
-            const body = await response.text().catch(() => "");
-            const err = new Error(
-                `Failed to get upload token (${response.status}): ${body}`,
-            );
-            // Attach structured metadata for better error handling upstream.
+            const body = await response.text().catch(() => '');
+            const err = new Error(`Failed to get upload token (${response.status}): ${body}`);
             err.status = response.status;
             err.body = body;
+            this._handleUnauthorized(response.status);
             throw err;
         }
-        const data = (await response.json()) || {};
         // Return the full data object so we can check for both uploadToken and upload_token
-        return data;
+        return (await response.json()) || {};
     }
 
     async registerMeetingUrl({ meetingUrl, recordingId, sdkUploadId }) {
@@ -61,78 +73,63 @@ class Api {
             return;
         }
         if (!this.authToken) {
-            throw new Error("Missing auth token (call setAuthToken first)");
+            throw new Error('Missing auth token (call setAuthToken first)');
         }
-        const response = await fetch(
-            `${this.apiUrl}${apiRoutes.registerMeetingUrl}`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json",
-                    Authorization: `Bearer ${this.authToken}`,
-                },
-                body: JSON.stringify({ meetingUrl, recordingId, sdkUploadId }),
+        const response = await this._fetch(`${this.apiUrl}${apiRoutes.registerMeetingUrl}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                Authorization: `Bearer ${this.authToken}`,
             },
-        );
+            body: JSON.stringify({ meetingUrl, recordingId, sdkUploadId }),
+        });
 
         if (!response.ok) {
-            const body = await response.text().catch(() => "");
-            throw new Error(
-                `Failed to register meeting URL (${response.status}): ${body}`,
-            );
+            const body = await response.text().catch(() => '');
+            this._handleUnauthorized(response.status);
+            throw new Error(`Failed to register meeting URL (${response.status}): ${body}`);
         }
-        const data = (await response.json()) || {};
-        return data;
+        return (await response.json()) || {};
     }
 
     async getUserProfile() {
         if (!this.authToken) {
-            throw new Error("Missing auth token (call setAuthToken first)");
+            throw new Error('Missing auth token (call setAuthToken first)');
         }
 
-        const response = await fetch(
-            `${this.apiUrl}${apiRoutes.getUserProfile}`,
-            {
-                method: "GET",
-                headers: {
-                    Accept: "application/json",
-                    Authorization: `Bearer ${this.authToken}`,
-                },
+        const response = await this._fetch(`${this.apiUrl}${apiRoutes.getUserProfile}`, {
+            method: 'GET',
+            headers: {
+                Accept: 'application/json',
+                Authorization: `Bearer ${this.authToken}`,
             },
-        );
+        });
 
         if (!response.ok) {
-            const body = await response.text().catch(() => "");
-            const err = new Error(
-                `Failed to get user profile (${response.status}): ${body}`,
-            );
+            const body = await response.text().catch(() => '');
+            const err = new Error(`Failed to get user profile (${response.status}): ${body}`);
             err.status = response.status;
             err.body = body;
+            this._handleUnauthorized(response.status);
             throw err;
         }
 
-        const data = (await response.json()) || {};
-        return data;
+        return (await response.json()) || {};
     }
 
-    async updateDesktopSdkDiagnostics({
-        timestamp,
-        platform,
-        version,
-        permissions,
-    }) {
+    async updateDesktopSdkDiagnostics({ timestamp, platform, version, permissions }) {
         if (!this.authToken) {
-            throw new Error("Missing auth token (call setAuthToken first)");
+            throw new Error('Missing auth token (call setAuthToken first)');
         }
 
-        const response = await fetch(
+        const response = await this._fetch(
             `${this.apiUrl}${apiRoutes.updateDesktopSdkDiagnostics}`,
             {
-                method: "PUT",
+                method: 'PUT',
                 headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json",
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
                     Authorization: `Bearer ${this.authToken}`,
                 },
                 body: JSON.stringify({
@@ -145,17 +142,17 @@ class Api {
         );
 
         if (!response.ok) {
-            const body = await response.text().catch(() => "");
+            const body = await response.text().catch(() => '');
             const err = new Error(
                 `Failed to update desktop sdk diagnostics (${response.status}): ${body}`,
             );
             err.status = response.status;
             err.body = body;
+            this._handleUnauthorized(response.status);
             throw err;
         }
 
-        const data = (await response.json().catch(() => null)) || {};
-        return data;
+        return (await response.json().catch(() => null)) || {};
     }
 }
 

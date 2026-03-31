@@ -10,8 +10,8 @@ module.exports = {
   module: {
     rules,
   },
-  entry: {
-    renderer: './src/renderer.js',
-    'note-editor/renderer': './src/pages/note-editor/renderer.js',
-  },
+  entry: {},
+  cache: {
+    type: 'filesystem',
+  }
 };
