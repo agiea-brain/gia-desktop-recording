@@ -100,3 +100,4 @@ out/
 .env.local
 .env.trustedsigning
 electron-windows-sign.log
+build/

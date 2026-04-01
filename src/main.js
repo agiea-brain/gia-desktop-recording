@@ -80,22 +80,26 @@ const api = new Api();
 
 // When any API call gets a 401, clear auth state and prompt re-login.
 let authExpiredPopupShown = false;
+let authRefreshInFlight = false;
 api.onAuthExpired = async () => {
-    if (authExpiredPopupShown) return;
+    if (authExpiredPopupShown || authRefreshInFlight) return;
+    authRefreshInFlight = true;
     logger.info('[auth] token expired (401), attempting silent refresh');
 
     // Try silent refresh first
     try {
         const token = await getStoredAccessToken({ allowRefresh: true });
-        if (token) {
+        if (token?.access_token) {
             logger.info('[auth] silent refresh succeeded');
-            api.setAuthToken(token);
+            api.setAuthToken(token.access_token);
             await syncUserIdFromProfile();
             refreshTrayMenu();
             return;
         }
     } catch (e) {
         logger.warn('[auth] silent refresh failed:', e);
+    } finally {
+        authRefreshInFlight = false;
     }
 
     // Silent refresh failed — prompt re-login

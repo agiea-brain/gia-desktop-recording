@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import {loadEnv} from './load-env';
+import logger from './logger';
 
 /**
  * Auth0 OAuth (Authorization Code + PKCE) helper for Electron main-process.
@@ -509,6 +510,7 @@ export async function getStoredAccessToken({allowRefresh = true} = {}) {
 
 	// attempt refresh
 	try {
+		logger.info('[auth] access token expired, attempting refresh');
 		const refreshed = await refreshAccessToken({
 			domain: stored.domain || DEFAULTS.domain,
 			clientId: stored.client_id || DEFAULTS.clientId,
@@ -529,8 +531,12 @@ export async function getStoredAccessToken({allowRefresh = true} = {}) {
 		if (!next.refresh_token) next.refresh_token = stored.refresh_token;
 
 		await writeStoredTokens(next);
+		logger.info('[auth] refresh token exchange succeeded');
 		return next;
 	} catch (e) {
+		logger.warn('[auth] refresh token exchange failed', {
+			error: e?.message || String(e),
+		});
 		// Preserve the refresh_token so the next attempt can retry.
 		// Only wipe everything when there's no refresh_token left to try.
 		if (stored.refresh_token) {
@@ -642,9 +648,12 @@ export async function logout() {
 
 export async function isAuthenticated() {
 	try {
-		const t = await getStoredAccessToken({allowRefresh: false});
+		const t = await getStoredAccessToken({allowRefresh: true});
 		return {authenticated: !!t, accessToken: t?.access_token || null};
-	} catch {
+	} catch (e) {
+		logger.warn('[auth] isAuthenticated failed', {
+			error: e?.message || String(e),
+		});
 		return {authenticated: false, accessToken: null};
 	}
 }
