@@ -60,6 +60,7 @@ function setupAutoUpdates() {
                     type: UpdateSourceType.ElectronPublicUpdateService,
                     repo: 'agiea-brain/gia-desktop-recording',
                 },
+                notifyUser: true,
                 logger: {
                     log: (...args) => logger.info('[auto-update]', ...args),
                 },
