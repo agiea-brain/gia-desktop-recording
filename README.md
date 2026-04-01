@@ -77,7 +77,7 @@ Optional:
 ```shell 
 
 # Build DMG file
-GIA_MAC_SIGN=1 npm run make
+rm -rf out .webpack && GIA_MAC_SIGN=1 npm run make
 
 # Notarize DMG
 xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile "gia-notarize" --wait
