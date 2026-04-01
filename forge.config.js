@@ -2,6 +2,7 @@ const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
 const SHOULD_SIGN_MAC = process.env.GIA_MAC_SIGN === '1';
+const SHOULD_SIGN_WINDOWS = process.env.GIA_WIN_SIGN === '1';
 const MAC_BUNDLE_ID = process.env.GIA_MAC_BUNDLE_ID || 'com.gia.desktop-recording';
 
 module.exports = {
@@ -11,6 +12,11 @@ module.exports = {
         asar: {
             unpackDir: 'node_modules/@recallai',
         },
+	windowsSign: SHOULD_SIGN_WINDOWS ? {
+    			signToolPath: process.env.SIGNTOOL_PATH,
+    			hashes: ["sha256"],
+    			signWithParams: "/dlib " + process.env.AZURE_CODE_SIGNING_DLIB + " /dmdf " + process.env.AZURE_METADATA_JSON
+			} : undefined,
         // Ensure the tray icon and popup HTML are available at runtime when packaged.
         extraResource: [
             './src/assets/gia-tray.png',

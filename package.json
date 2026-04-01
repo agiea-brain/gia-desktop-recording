@@ -16,7 +16,8 @@
         "publish": "electron-forge publish",
         "format": "prettier --write 'src/**/*.{js,html,css,json}'",
         "lint": "echo \"No linting configured\"",
-        "start:server": "node ./src/server.js"
+        "start:server": "node ./src/server.js",
+	"postinstall": "node -e \"const fs=require('fs');const src='node_modules/@electron/windows-sign';const dst='node_modules/@electron/packager/node_modules/@electron/windows-sign';if(fs.existsSync(src)&&fs.existsSync(dst)){fs.rmSync(dst,{recursive:true});fs.cpSync(src,dst,{recursive:true});console.log('Patched @electron/windows-sign in packager')}\""
     },
     "keywords": [],
     "author": {
@@ -36,8 +37,11 @@
         "@electron-forge/plugin-fuses": "^7.8.0",
         "@electron-forge/plugin-webpack": "^7.8.0",
         "@electron/fuses": "^1.8.0",
+        "@electron/windows-sign": "^2.0.2",
         "@vercel/webpack-asset-relocator-loader": "^1.7.3",
+        "cross-env": "^10.1.0",
         "css-loader": "^6.11.0",
+        "dotenv-cli": "^11.0.0",
         "electron": "41.0.4",
         "node-loader": "^2.1.0",
         "prettier": "^3.8.1",
