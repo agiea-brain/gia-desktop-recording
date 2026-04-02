@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     requestPermission: (step) => ipcRenderer.invoke('onboarding:request-permission', step),
     checkPermission: (step) => ipcRenderer.invoke('onboarding:check-permission', step),
     openSettings: (permission) => ipcRenderer.invoke('onboarding:open-settings', permission),
-    complete: () => ipcRenderer.invoke('onboarding:complete'),
+    complete: (opts = {}) => ipcRenderer.invoke('onboarding:complete', opts),
     getStarted: () => ipcRenderer.invoke('onboarding:get-started'),
     openExternal: (url) => shell.openExternal(url),
     onLogo: (callback) => ipcRenderer.on('onboarding:logo', (_event, payload) => callback(payload)),

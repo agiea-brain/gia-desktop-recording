@@ -113,6 +113,7 @@
                 background: var(--primary);
                 color: var(--primary-fg);
                 flex-shrink: 0;
+                transition: all 0.2s ease;
             }
             .btn:hover:not(:disabled) {
                 background: #2a2a2a;
@@ -278,25 +279,24 @@
             }
 
             .step-number {
-                width: 30px;
-                height: 30px;
+                width: 10px;
+                height: 10px;
                 border-radius: 50%;
-                background: #e5e5e5;
-                color: var(--muted);
+                background: #d4d4d8;
+                color: transparent;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-weight: 700;
-                font-size: 13px;
                 flex-shrink: 0;
             }
 
             .step.active .step-number {
                 background: var(--primary);
-                color: var(--primary-fg);
             }
 
             .step.completed .step-number {
+                width: 18px;
+                height: 18px;
                 background: var(--success);
                 color: white;
             }
@@ -340,8 +340,8 @@
             }
 
             .checkmark {
-                width: 16px;
-                height: 16px;
+                width: 10px;
+                height: 10px;
             }
 
             .view-body--centered {
@@ -352,6 +352,128 @@
 
             .btn-maximize {
                 cursor: default;
+            }
+            /* ==================== SIGNED-IN GUIDE VIEW ==================== */
+            #signedInView {
+                text-align: left;
+            }
+
+            .signed-in-heading {
+                font-size: 22px;
+                font-weight: 700;
+                letter-spacing: -0.03em;
+                margin-bottom: 8px;
+                text-align: center;
+            }
+
+            .signed-in-subtitle {
+                font-size: 14px;
+                color: var(--muted);
+                line-height: 1.5;
+                margin-bottom: 20px;
+                text-align: center;
+            }
+
+            .signed-in-card {
+                width: 100%;
+                background: var(--secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 18px;
+                margin-bottom: 16px;
+                min-height: 180px;
+            }
+
+            .signed-in-step-label {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--muted);
+                margin-bottom: 8px;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+
+            .signed-in-step-title {
+                font-size: 18px;
+                font-weight: 700;
+                letter-spacing: -0.02em;
+                margin-bottom: 10px;
+            }
+
+            .signed-in-step-description {
+                font-size: 14px;
+                color: var(--foreground);
+                line-height: 1.55;
+            }
+
+            .signed-in-image-wrap {
+                margin-top: 14px;
+                border-radius: 10px;
+                overflow: hidden;
+                border: 1px solid var(--border);
+                background: #fff;
+                height: 170px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .signed-in-image {
+                display: block;
+                max-width: 100%;
+                max-height: 100%;
+                width: auto;
+                height: auto;
+                object-fit: contain;
+            }
+
+            .signed-in-dots {
+                display: flex;
+                justify-content: center;
+                gap: 8px;
+                margin-bottom: 14px;
+            }
+
+            .signed-in-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: #d4d4d8;
+            }
+
+            .signed-in-dot.active {
+                background: var(--primary);
+            }
+            .signed-in-actions {
+                display: flex;
+                gap: 10px;
+            }
+            .signed-in-actions .btn {
+                width: 50%;
+            }
+            .btn.btn-secondary {
+                background: var(--secondary);
+                color: var(--foreground);
+                border-color: var(--border);
+            }
+            .btn.btn-secondary:hover:not(:disabled) {
+                background: #ececec;
+                border-color: #d4d4d8;
+            }
+
+            .btn-secondary-link {
+                border: none;
+                background: none;
+                color: var(--muted);
+                font-size: 13px;
+                font-weight: 600;
+                text-decoration: underline;
+                cursor: pointer;
+                margin-top: 10px;
+                align-self: center;
+            }
+            .btn-secondary-link:hover {
+                color: var(--foreground);
             }
 
             /* ==================== READY VIEW ==================== */
@@ -552,12 +674,12 @@
                     </div>
 
                     <div class="stepper">
-                        <div class="step" id="step-microphone" data-step="microphone">
-                            <div class="step-number">1</div>
+                        <div class="step" id="step-screen" data-step="screen">
+                            <div class="step-number"></div>
                             <div class="step-content">
-                                <div class="step-title">Microphone</div>
-                                <div class="step-description">Capture meeting audio</div>
-                                <div class="open-settings-link" data-permission="microphone">
+                                <div class="step-title">Screen sharing</div>
+                                <div class="step-description">Capture the speaker name</div>
+                                <div class="open-settings-link" data-permission="screen">
                                     Open System Settings
                                 </div>
                             </div>
@@ -565,7 +687,7 @@
                         </div>
 
                         <div class="step pending" id="step-accessibility" data-step="accessibility">
-                            <div class="step-number">2</div>
+                            <div class="step-number"></div>
                             <div class="step-content">
                                 <div class="step-title">Accessibility</div>
                                 <div class="step-description">Detect when meetings start</div>
@@ -576,12 +698,12 @@
                             <div class="step-status"></div>
                         </div>
 
-                        <div class="step pending" id="step-screen" data-step="screen">
-                            <div class="step-number">3</div>
+                        <div class="step pending" id="step-microphone" data-step="microphone">
+                            <div class="step-number"></div>
                             <div class="step-content">
-                                <div class="step-title">Screen recording</div>
-                                <div class="step-description">Capture the speaker name</div>
-                                <div class="open-settings-link" data-permission="screen">
+                                <div class="step-title">Microphone</div>
+                                <div class="step-description">Capture meeting audio</div>
+                                <div class="open-settings-link" data-permission="microphone">
                                     Open System Settings
                                 </div>
                             </div>
@@ -592,7 +714,34 @@
                         >Learn more about permissions</a
                     >
                 </div>
-                <button class="btn" id="permissionBtn">Grant microphone access</button>
+                <button class="btn" id="permissionBtn">Grant screen sharing access</button>
+            </div>
+            <!-- Signed-In Guide View -->
+            <div class="view" id="signedInView">
+                <div class="view-body">
+                    <h1 class="signed-in-heading" id="signedInHeading">You're signed in</h1>
+                    <p class="signed-in-subtitle" id="signedInSubtitle">
+                        Gia is now running in the background.
+                    </p>
+                    <div class="signed-in-card">
+                        <div class="signed-in-step-label" id="signedInStepLabel"></div>
+                        <div class="signed-in-step-title" id="signedInStepTitle"></div>
+                        <p class="signed-in-step-description" id="signedInStepDescription"></p>
+                        <div
+                            class="signed-in-image-wrap"
+                            id="signedInImageWrap"
+                            style="display: none"
+                        >
+                            <img class="signed-in-image" id="signedInImage" alt="" src="" />
+                        </div>
+                    </div>
+                    <div class="signed-in-dots" id="signedInDots"></div>
+                </div>
+                <div class="signed-in-actions">
+                    <button class="btn btn-secondary" id="signedInPrevBtn">Previous</button>
+                    <button class="btn" id="signedInNextBtn">Next</button>
+                </div>
+                <button class="btn-secondary-link" id="signedInSkipBtn">Skip guide</button>
             </div>
 
             <!-- Ready View -->
@@ -668,18 +817,92 @@
             // Elements
             const loginView = document.getElementById('loginView');
             const permissionsView = document.getElementById('permissionsView');
+            const signedInView = document.getElementById('signedInView');
             const readyView = document.getElementById('readyView');
             const giaLogoEl = document.getElementById('giaLogo');
             const loginBtn = document.getElementById('loginBtn');
             const permissionBtn = document.getElementById('permissionBtn');
+            const signedInPrevBtn = document.getElementById('signedInPrevBtn');
+            const signedInNextBtn = document.getElementById('signedInNextBtn');
+            const signedInSkipBtn = document.getElementById('signedInSkipBtn');
+            const signedInHeadingEl = document.getElementById('signedInHeading');
+            const signedInSubtitleEl = document.getElementById('signedInSubtitle');
+            const signedInStepLabelEl = document.getElementById('signedInStepLabel');
+            const signedInStepTitleEl = document.getElementById('signedInStepTitle');
+            const signedInStepDescriptionEl = document.getElementById('signedInStepDescription');
+            const signedInImageWrapEl = document.getElementById('signedInImageWrap');
+            const signedInImageEl = document.getElementById('signedInImage');
+            const signedInDotsEl = document.getElementById('signedInDots');
             const getStartedBtn = document.getElementById('getStartedBtn');
             const closeBtn = document.getElementById('closeBtn');
             const minimizeBtn = document.getElementById('minimizeBtn');
 
             let isWindows = false;
+            let currentFirstName = null;
+            let postLoginState = {
+                onboardingComplete: false,
+                needsPermissions: false,
+                permissions: null,
+                platform: 'darwin',
+                firstName: null,
+            };
+            let signedInSlides = [];
+            let signedInSlideIndex = 0;
+            let guideImages = {
+                macTray: null,
+                recordPopup: null,
+                windowsTray: null,
+            };
+
+            const signedInGuideByPlatform = {
+                darwin: [
+                    {
+                        label: 'Step 1 of 3',
+                        title: 'Find Gia in your menu bar',
+                        description:
+                            'Look for the Gia icon in the top-right menu bar. It stays there while the app runs.',
+                        imageKey: 'macTray',
+                    },
+                    {
+                        label: 'Step 2 of 3',
+                        title: 'Start recording when a meeting is detected',
+                        description:
+                            'When Gia detects a supported meeting, you’ll get a prompt to start recording.',
+                        imageKey: 'recordPopup',
+                    },
+                    {
+                        label: 'Step 3 of 3',
+                        title: 'Review calls in the platform',
+                        description:
+                            'After each call, transcripts and summaries are available in your Gia workspace.',
+                    },
+                ],
+                win32: [
+                    {
+                        label: 'Step 1 of 3',
+                        title: 'Open the taskbar tray area',
+                        description:
+                            'Click the arrow near your clock to view hidden tray icons and find Gia.',
+                        imageKey: 'windowsTray',
+                    },
+                    {
+                        label: 'Step 2 of 3',
+                        title: 'Pin Gia for quick access',
+                        description:
+                            'Drag Gia to the visible taskbar tray so you can always confirm it is running.',
+                        imageKey: 'recordPopup',
+                    },
+                    {
+                        label: 'Step 3 of 3',
+                        title: 'Use Gia when meetings start',
+                        description:
+                            'Gia will notify you for supported meetings and then upload transcripts and summaries.',
+                    },
+                ],
+            };
 
             // Permission steps
-            const permissionSteps = ['microphone', 'accessibility', 'screen'];
+            const permissionSteps = ['screen', 'accessibility', 'microphone'];
             let currentStepIndex = 0;
             let permissionStates = { microphone: false, accessibility: false, screen: false };
 
@@ -735,6 +958,7 @@
 
                 if (status === 'active') {
                     stepEl.classList.add('active');
+                    numberEl.innerHTML = '';
                     statusEl.textContent = '';
                 } else if (status === 'completed') {
                     stepEl.classList.add('completed');
@@ -743,6 +967,7 @@
                     statusEl.textContent = 'Granted';
                 } else if (status === 'pending') {
                     stepEl.classList.add('pending');
+                    numberEl.innerHTML = '';
                     statusEl.textContent = '';
                 }
             }
@@ -751,9 +976,9 @@
             function updatePermissionButton() {
                 const step = permissionSteps[currentStepIndex];
                 const labels = {
-                    microphone: 'Grant microphone access',
+                    screen: 'Grant screen sharing access',
                     accessibility: 'Grant accessibility access',
-                    screen: 'Grant screen recording access',
+                    microphone: 'Grant microphone access',
                 };
                 permissionBtn.innerHTML = labels[step] || 'Continue';
                 permissionBtn.disabled = false;
@@ -788,8 +1013,98 @@
             const VIEW_SIZES = {
                 login: { width: 440, height: 480 },
                 permissions: { width: 440, height: 520 },
+                signedIn: { width: 440, height: 560 },
                 ready: { width: 440, height: 460 },
             };
+
+            function getSignedInSlidesForPlatform(platform) {
+                if (platform === 'win32') return signedInGuideByPlatform.win32;
+                return signedInGuideByPlatform.darwin;
+            }
+
+            function renderSignedInDots() {
+                signedInDotsEl.innerHTML = '';
+                signedInSlides.forEach((_, index) => {
+                    const dot = document.createElement('div');
+                    dot.className =
+                        'signed-in-dot' + (index === signedInSlideIndex ? ' active' : '');
+                    signedInDotsEl.appendChild(dot);
+                });
+            }
+
+            function renderSignedInSlide() {
+                const slide = signedInSlides[signedInSlideIndex];
+                if (!slide) return;
+                signedInStepLabelEl.textContent = slide.label;
+                signedInStepTitleEl.textContent = slide.title;
+                signedInStepDescriptionEl.textContent = slide.description;
+                const imageDataUrl = slide.imageKey ? guideImages[slide.imageKey] : null;
+                if (typeof imageDataUrl === 'string' && imageDataUrl.length > 0) {
+                    signedInImageEl.src = imageDataUrl;
+                    signedInImageEl.alt = slide.title;
+                    signedInImageWrapEl.style.display = 'block';
+                } else {
+                    signedInImageEl.src = '';
+                    signedInImageEl.alt = '';
+                    signedInImageWrapEl.style.display = 'none';
+                }
+                signedInPrevBtn.disabled = signedInSlideIndex === 0;
+                signedInNextBtn.textContent =
+                    signedInSlideIndex === signedInSlides.length - 1 ? 'Finish' : 'Next';
+                renderSignedInDots();
+            }
+
+            function showSignedInGuide(payload = {}) {
+                const platform = payload.platform || (isWindows ? 'win32' : 'darwin');
+                isWindows = platform === 'win32';
+                if (payload.guideImages && typeof payload.guideImages === 'object') {
+                    guideImages = { ...guideImages, ...payload.guideImages };
+                }
+
+                postLoginState = {
+                    onboardingComplete: !!payload.onboardingComplete,
+                    needsPermissions: !!payload.needsPermissions,
+                    permissions: payload.permissions || null,
+                    platform,
+                    firstName: payload.firstName || null,
+                };
+
+                if (postLoginState.permissions) {
+                    permissionStates = {
+                        microphone: !!postLoginState.permissions.microphone,
+                        accessibility: !!postLoginState.permissions.accessibility,
+                        screen: !!postLoginState.permissions.screen,
+                    };
+                }
+
+                signedInSlides = getSignedInSlidesForPlatform(platform);
+                signedInSlideIndex = 0;
+                signedInHeadingEl.textContent = postLoginState.firstName
+                    ? "You're signed in, " + postLoginState.firstName
+                    : "You're signed in";
+                signedInSubtitleEl.textContent = isWindows
+                    ? 'Gia is running from your taskbar tray. Review this quick guide before continuing.'
+                    : 'Gia is running from your menu bar. Review this quick guide before continuing.';
+                renderSignedInSlide();
+                showView('signedInView');
+            }
+
+            async function continueAfterSignedInGuide() {
+                if (postLoginState.needsPermissions) {
+                    await api.resize(VIEW_SIZES.permissions);
+                    showView('permissionsView');
+                    initPermissionsView();
+                    await autoCheckGrantedPermissions();
+                    return;
+                }
+
+                if (!postLoginState.onboardingComplete) {
+                    await api.complete({ showReady: false });
+                    return;
+                }
+
+                await api.close();
+            }
 
             // Login button
             loginBtn.addEventListener('click', async () => {
@@ -799,18 +1114,34 @@
                 try {
                     const result = await api.login();
                     if (result.success) {
-                        if (isWindows) {
-                            // Windows doesn't need permissions — skip to complete
-                            console.log('Login successful, skipping permissions (Windows)');
-                            permissionBtn.disabled = true;
-                            await api.complete();
-                            return;
+                        postLoginState = {
+                            onboardingComplete: !!result.onboardingComplete,
+                            needsPermissions: !!result.needsPermissions,
+                            permissions: result.permissions || null,
+                            platform: result.platform || (isWindows ? 'win32' : 'darwin'),
+                            firstName: result.firstName || null,
+                        };
+                        currentFirstName = postLoginState.firstName;
+                        isWindows = postLoginState.platform === 'win32';
+
+                        if (postLoginState.needsPermissions) {
+                            console.log('Login successful, showing permissions first');
+                            await api.resize(VIEW_SIZES.permissions);
+                            showView('permissionsView');
+                            if (postLoginState.permissions) {
+                                permissionStates = {
+                                    microphone: !!postLoginState.permissions.microphone,
+                                    accessibility: !!postLoginState.permissions.accessibility,
+                                    screen: !!postLoginState.permissions.screen,
+                                };
+                            }
+                            initPermissionsView();
+                            await autoCheckGrantedPermissions();
+                        } else {
+                            console.log('Login successful, showing signed-in guide');
+                            await api.resize(VIEW_SIZES.signedIn);
+                            showSignedInGuide(result);
                         }
-                        console.log('Login successful, moving to permissions');
-                        await api.resize(VIEW_SIZES.permissions);
-                        showView('permissionsView');
-                        initPermissionsView();
-                        await autoCheckGrantedPermissions();
                     } else {
                         console.error('Login failed:', result.error);
                         loginBtn.disabled = false;
@@ -820,6 +1151,46 @@
                     console.error('Login error:', error);
                     loginBtn.disabled = false;
                     loginBtn.textContent = 'Continue with Gia';
+                }
+            });
+            signedInPrevBtn.addEventListener('click', () => {
+                if (signedInSlideIndex <= 0) return;
+                signedInSlideIndex -= 1;
+                renderSignedInSlide();
+            });
+
+            signedInNextBtn.addEventListener('click', async () => {
+                if (signedInSlideIndex < signedInSlides.length - 1) {
+                    signedInSlideIndex += 1;
+                    renderSignedInSlide();
+                    return;
+                }
+
+                signedInNextBtn.disabled = true;
+                signedInNextBtn.innerHTML = '<div class=\"spinner\"></div>Continuing...';
+                signedInPrevBtn.disabled = true;
+                signedInSkipBtn.disabled = true;
+                try {
+                    await continueAfterSignedInGuide();
+                } finally {
+                    signedInPrevBtn.disabled = false;
+                    signedInNextBtn.disabled = false;
+                    signedInSkipBtn.disabled = false;
+                    renderSignedInSlide();
+                }
+            });
+
+            signedInSkipBtn.addEventListener('click', async () => {
+                signedInPrevBtn.disabled = true;
+                signedInNextBtn.disabled = true;
+                signedInSkipBtn.disabled = true;
+                try {
+                    await continueAfterSignedInGuide();
+                } finally {
+                    signedInPrevBtn.disabled = false;
+                    signedInNextBtn.disabled = false;
+                    signedInSkipBtn.disabled = false;
+                    renderSignedInSlide();
                 }
             });
 
@@ -833,47 +1204,7 @@
                 permissionBtn.disabled = true;
             }
 
-            // Centralized handler for when a permission is granted
-            function handlePermissionGranted(permission) {
-                permissionStates[permission] = true;
-                console.log('Permission ' + permission + ' granted');
-                updateStepUI(permission, 'completed');
-
-                currentStepIndex = findFirstUngrantedIndex();
-
-                if (currentStepIndex >= permissionSteps.length) {
-                    console.log('All permissions granted!');
-                    permissionBtn.textContent = 'Finish setup';
-                    permissionBtn.disabled = false;
-                    updateProgressBar();
-                } else {
-                    updateStepUI(permissionSteps[currentStepIndex], 'active');
-                    updatePermissionButton();
-                }
-            }
-
-            // Open System Settings links
-            document.querySelectorAll('.open-settings-link').forEach(function (link) {
-                link.addEventListener('click', function (e) {
-                    e.stopPropagation();
-                    var permission = link.dataset.permission;
-                    api.openSettings(permission);
-                });
-            });
-
-            // Permission button
-            permissionBtn.addEventListener('click', async () => {
-                const step = permissionSteps[currentStepIndex];
-
-                // If all permissions done, this is the "Finish setup" click
-                if (currentStepIndex >= permissionSteps.length) {
-                    console.log('Finishing setup...');
-                    permissionBtn.disabled = true;
-                    permissionBtn.innerHTML = '<div class="spinner"></div>Finishing...';
-                    await api.complete();
-                    return;
-                }
-
+            async function requestPermissionForStep(step) {
                 // If we're already waiting for this permission, don't request again
                 if (waitingForPermission === step) {
                     console.log('Already waiting for ' + step + ' permission, ignoring click');
@@ -898,6 +1229,61 @@
                     waitingForPermission = null;
                     updatePermissionButton();
                 }
+            }
+
+            // Centralized handler for when a permission is granted
+            function handlePermissionGranted(permission) {
+                permissionStates[permission] = true;
+                console.log('Permission ' + permission + ' granted');
+                updateStepUI(permission, 'completed');
+
+                currentStepIndex = findFirstUngrantedIndex();
+
+                if (currentStepIndex >= permissionSteps.length) {
+                    console.log('All permissions granted!');
+                    permissionBtn.textContent = 'Finish setup';
+                    permissionBtn.disabled = false;
+                    updateProgressBar();
+                } else {
+                    updateStepUI(permissionSteps[currentStepIndex], 'active');
+                    updatePermissionButton();
+                }
+            }
+
+            // Open System Settings links
+            document.querySelectorAll('.open-settings-link').forEach(function (link) {
+                link.addEventListener('click', async function (e) {
+                    e.stopPropagation();
+                    var permission = link.dataset.permission;
+                    if (permission === 'microphone') {
+                        if (permissionSteps[currentStepIndex] !== 'microphone') return;
+                        await requestPermissionForStep(permission);
+                        return;
+                    }
+                    api.openSettings(permission);
+                });
+            });
+
+            // Permission button
+            permissionBtn.addEventListener('click', async () => {
+                const step = permissionSteps[currentStepIndex];
+
+                // If all permissions done, this is the "Finish setup" click
+                if (currentStepIndex >= permissionSteps.length) {
+                    console.log('All permissions granted, showing signed-in guide');
+                    postLoginState = {
+                        ...postLoginState,
+                        needsPermissions: false,
+                        permissions: { ...permissionStates },
+                        firstName: postLoginState.firstName || currentFirstName,
+                        platform: postLoginState.platform || (isWindows ? 'win32' : 'darwin'),
+                    };
+                    await api.resize(VIEW_SIZES.signedIn);
+                    showSignedInGuide(postLoginState);
+                    return;
+                }
+
+                await requestPermissionForStep(step);
             });
 
             // Get Started button
@@ -920,11 +1306,30 @@
             api.onInit(async (payload) => {
                 console.log('Onboarding init:', payload);
                 isWindows = payload.platform === 'win32';
+                currentFirstName = payload.firstName || null;
+                if (payload.guideImages && typeof payload.guideImages === 'object') {
+                    guideImages = { ...guideImages, ...payload.guideImages };
+                }
 
                 // Windows doesn't need permissions — skip straight to complete
                 if (isWindows && payload.view === 'permissions') {
-                    console.log('Skipping permissions view (Windows)');
-                    await api.complete();
+                    console.log(
+                        'Permissions already available on Windows, showing signed-in guide',
+                    );
+                    postLoginState = {
+                        ...postLoginState,
+                        onboardingComplete: !!payload.onboardingComplete,
+                        needsPermissions: false,
+                        permissions: {
+                            microphone: true,
+                            accessibility: true,
+                            screen: true,
+                        },
+                        platform: 'win32',
+                        firstName: payload.firstName || null,
+                    };
+                    await api.resize(VIEW_SIZES.signedIn);
+                    showSignedInGuide(postLoginState);
                     return;
                 }
 
@@ -934,6 +1339,9 @@
                             "You're good to go, " + payload.firstName;
                     }
                     showView('readyView');
+                } else if (payload.view === 'signed-in') {
+                    await api.resize(VIEW_SIZES.signedIn);
+                    showSignedInGuide(payload);
                 } else if (payload.view === 'permissions') {
                     showView('permissionsView');
                     if (payload.permissions) {

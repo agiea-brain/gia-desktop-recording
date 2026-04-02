@@ -11,8 +11,8 @@ import logger from './logger';
  *
  * What you need to configure in Auth0:
  * - Allowed Callback URLs must include:
- *   - Interactive login: http://127.0.0.1:47823/callback
- *   - Silent login fallback: gia://auth/callback
+ *   - Deep-link login callback: gia://auth/callback
+ *   - (Optional fallback) Loopback callback: http://*********:47823/callback
  */
 
 // Ensure env is loaded before reading process.env into defaults.
@@ -556,11 +556,12 @@ export async function login({
     clientId = DEFAULTS.clientId,
     audience = DEFAULTS.audience,
     scopes = DEFAULTS.scopes,
-    prompt = 'login', // "none" for silent attempt
+    prompt = null, // e.g. "none" for silent attempt; null lets Auth0 decide based on session
+    callbackMode = 'deeplink', // "deeplink" | "loopback"
 } = {}) {
     await app.whenReady();
     const requestedScopes = ensureRequiredScopes(scopes);
-    const useDeepLinkCallback = prompt === 'none';
+    const useDeepLinkCallback = callbackMode !== 'loopback';
     const redirectUri = useDeepLinkCallback
         ? buildDeepLinkRedirectUri()
         : buildRedirectUri(DEFAULTS);
@@ -569,25 +570,26 @@ export async function login({
     const codeVerifier = randomString(64);
     const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
 
-    const authUrl =
-        `https://${domain}/authorize?` +
-        new URLSearchParams({
-            client_id: clientId,
-            response_type: 'code',
-            redirect_uri: redirectUri,
-            audience,
-            scope: requestedScopes,
-            state,
-            code_challenge: codeChallenge,
-            code_challenge_method: 'S256',
-            prompt,
-        }).toString();
+    const authParams = new URLSearchParams({
+        client_id: clientId,
+        response_type: 'code',
+        redirect_uri: redirectUri,
+        audience,
+        scope: requestedScopes,
+        state,
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+    });
+    if (typeof prompt === 'string' && prompt.length > 0) {
+        authParams.set('prompt', prompt);
+    }
+    const authUrl = `https://${domain}/authorize?${authParams.toString()}`;
 
-    // Use a browser-visible loopback page for interactive sign-in so the browser
-    // shows a completion page, while silent auth can return straight to the app.
+    // Deep-link callbacks are used by default for a cleaner desktop sign-in flow.
+    // Loopback callbacks remain available as an explicit fallback mode.
     const callbackPromise = useDeepLinkCallback
         ? waitForDeepLinkCallback({
-              timeoutMs: 15000,
+              timeoutMs: prompt === 'none' ? 15000 : 300000,
           })
         : startLoopbackCallbackServer({
               host: DEFAULTS.redirectHost,

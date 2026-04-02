@@ -507,6 +507,18 @@ function showJoinMeetingPopupForInsufficientPermissions(reason = 'unknown') {
 }
 
 function showPermissionsPopupForMissingPermissions(reason = 'unknown') {
+    const isLoggedIn = Boolean(api?.authToken);
+    if (!isLoggedIn) {
+        logger.info('[permissions] missing permissions while logged out, showing login popup', {
+            reason,
+        });
+        showOnboardingPopup({
+            view: 'login',
+            message: 'Please sign in to continue.',
+        });
+        return;
+    }
+
     logger.info('[permissions] showing permissions popup', { reason });
     showOnboardingPopup({ view: 'permissions' });
 }
@@ -547,8 +559,9 @@ function handlePermissionRevocation({ prev, next, reason }) {
         reason,
         revoked: { mic: micRevoked, accessibility: accRevoked, screen: scrRevoked },
     });
-
-    showJoinMeetingPopupForInsufficientPermissions(`revoked:${reason}`);
+    if (api?.authToken) {
+        showJoinMeetingPopupForInsufficientPermissions(`revoked:${reason}`);
+    }
     showPermissionsPopupForMissingPermissions(`revoked:${reason}`);
 }
 
@@ -614,6 +627,10 @@ async function maybeRelaunchAfterAccessibilityGranted({ prev, next, reason = 'un
 
     // Skip auto-relaunch during onboarding - we handle restart ourselves
     if (!isOnboardingComplete()) return;
+    if (onboardingWindow && !onboardingWindow.isDestroyed()) {
+        logger.info('[app] deferring relaunch while onboarding window is open', { reason });
+        return;
+    }
 
     // Only relaunch on an actual transition from not granted -> granted.
     if (prev?.accessibility === false && next?.accessibility === true) {
@@ -759,6 +776,53 @@ function getTrayIconPath() {
     }
 
     return candidates[0];
+}
+
+function getAssetPath(filename) {
+    if (app.isPackaged) {
+        const packagedPath = path.join(process.resourcesPath, filename);
+        try {
+            if (fs.existsSync(packagedPath)) return packagedPath;
+        } catch {
+            // ignore
+        }
+    }
+
+    const candidates = [
+        path.join(process.cwd(), 'src', 'assets', filename),
+        path.join(app.getAppPath(), 'src', 'assets', filename),
+        path.resolve(__dirname, '..', '..', 'src', 'assets', filename),
+    ];
+
+    for (const p of candidates) {
+        try {
+            if (fs.existsSync(p)) return p;
+        } catch {
+            // ignore and try next
+        }
+    }
+
+    return null;
+}
+
+function getAssetImageDataUrl(filename) {
+    try {
+        const assetPath = getAssetPath(filename);
+        if (!assetPath) return null;
+        const image = nativeImage.createFromPath(assetPath);
+        if (image.isEmpty()) return null;
+        return image.toDataURL();
+    } catch {
+        return null;
+    }
+}
+
+function getOnboardingGuideImages() {
+    return {
+        macTray: getAssetImageDataUrl('mac-tray.png'),
+        recordPopup: getAssetImageDataUrl('record-popup.png'),
+        windowsTray: null,
+    };
 }
 
 function getMacAppIconPath() {
@@ -907,15 +971,14 @@ async function startMeetingRecordingWithAuth({ source = 'unknown' } = {}) {
     logger.info(`[recall] currentMeetingInfo: ${JSON.stringify(currentMeetingInfo)}`);
 
     try {
+        const accessToken = await ensureAccessToken({ interactive: true });
+        if (!accessToken) {
+            throw new Error('Not authenticated: no access token available');
+        }
         if (!areAllPermissionsGranted()) {
             showJoinMeetingPopupForInsufficientPermissions(`preflight:${source}`);
             showPermissionsPopupForMissingPermissions(`preflight:${source}`);
             throw buildInsufficientPermissionsError(`preflight:${source}`);
-        }
-
-        const accessToken = await ensureAccessToken({ interactive: true });
-        if (!accessToken) {
-            throw new Error('Not authenticated: no access token available');
         }
 
         await getUploadTokenAndStoreInfo();
@@ -1193,24 +1256,7 @@ async function ensureAccessToken({ interactive = false, loginOpts = {} } = {}) {
     // Prevent multiple auth popups at once
     if (!loginInFlight) {
         loginInFlight = (async () => {
-            // Try silent auth first (reuses existing browser session)
-            try {
-                logger.info('[auth] attempting silent login (prompt=none)');
-                await login({ ...loginOpts, prompt: 'none' });
-                const silent = await getStoredAccessToken({
-                    allowRefresh: true,
-                });
-                if (silent?.access_token) {
-                    logger.info('[auth] silent login succeeded');
-                    api.setAuthToken(silent.access_token);
-                    await syncUserIdFromProfile();
-                    sendDesktopSdkDiagnosticsIfNeeded();
-                    refreshTrayMenu();
-                    return silent.access_token;
-                }
-            } catch (e) {
-                logger.info('[auth] silent login failed, falling back to interactive:', e.message);
-            }
+            logger.info('[auth] opening browser for interactive login');
             await login(loginOpts);
             const after = await getStoredAccessToken({ allowRefresh: true });
             api.setAuthToken(after?.access_token || null);
@@ -1423,7 +1469,14 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
 
     onboardingWindow = new BrowserWindow({
         width: 440,
-        height: view === 'ready' ? 460 : view === 'permissions' ? 520 : 480,
+        height:
+            view === 'ready'
+                ? 460
+                : view === 'permissions'
+                  ? 520
+                  : view === 'signed-in'
+                    ? 560
+                    : 480,
         resizable: false,
         minimizable: true,
         maximizable: false,
@@ -1463,6 +1516,8 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
                     firstName: cachedUserFirstName,
                     permissions: getPermissionsBooleans(),
                     platform: process.platform,
+                    onboardingComplete: isOnboardingComplete(),
+                    guideImages: getOnboardingGuideImages(),
                 });
             }
         } catch (e) {
@@ -1473,7 +1528,10 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
     onboardingWindow.center();
 
     onboardingWindow.once('ready-to-show', () => {
-        onboardingWindow?.show();
+        if (!onboardingWindow || onboardingWindow.isDestroyed()) return;
+        onboardingWindow.show();
+        onboardingWindow.focus();
+        bringOnboardingToFront('onboarding-ready-to-show');
     });
 
     onboardingWindow.on('closed', () => {
@@ -1622,6 +1680,12 @@ function ensureRecallRuntimeListenersRegistered() {
             status === 'granted' &&
             isOnboardingComplete()
         ) {
+            if (onboardingWindow && !onboardingWindow.isDestroyed()) {
+                logger.info(
+                    '[app] deferring relaunch from recall event while onboarding window is open',
+                );
+                return;
+            }
             captureAccessibilityTrustedAtStartupOnce();
             if (accessibilityTrustedAtStartup === false) {
                 relaunchApp({ reason: 'recall-permission-status' });
@@ -1751,6 +1815,7 @@ function ensureSdkInitialized() {
         const initOptions = onboardingComplete
             ? {
                   apiUrl: 'https://us-east-1.recall.ai',
+                  acquirePermissionsOnStartup: [],
               }
             : {
                   apiUrl: 'https://us-east-1.recall.ai', // Critical: prevent SDK from auto-requesting other permissions on init during onboarding
@@ -1837,8 +1902,21 @@ async function setupOnboardingIpc() {
             logger.info('[onboarding] starting login...');
             const accessToken = await ensureAccessToken({ interactive: true });
             if (accessToken) {
+                const onboardingComplete = isOnboardingComplete();
+                const permissions = getPermissionsBooleans();
+                const needsPermissions =
+                    process.platform !== 'win32' && !areAllPermissionsGranted();
                 logger.info('[onboarding] login successful');
-                return { success: true };
+                return {
+                    success: true,
+                    nextView: 'signed-in',
+                    onboardingComplete,
+                    needsPermissions,
+                    firstName: cachedUserFirstName,
+                    permissions,
+                    platform: process.platform,
+                    guideImages: getOnboardingGuideImages(),
+                };
             } else {
                 logger.warn('[onboarding] login returned no token');
                 return { success: false, error: 'No token returned' };
@@ -1908,12 +1986,19 @@ async function setupOnboardingIpc() {
         }
     });
 
-    ipcMain.handle('onboarding:complete', async () => {
+    ipcMain.handle('onboarding:complete', async (_event, opts = {}) => {
+        const showReady = opts?.showReady !== false;
+        const onboardingWasComplete = isOnboardingComplete();
+        if (onboardingWasComplete) {
+            logger.info('[onboarding] complete requested for existing onboarded user');
+            closeOnboardingPopup();
+            refreshTrayMenu();
+            return { success: true, onboardingAlreadyComplete: true };
+        }
         logger.info('[onboarding] onboarding complete (no relaunch)');
 
-        // Mark onboarding complete. Set showReady so the ready screen
-        // appears after restart (screen recording permission may force a restart).
-        writeOnboardingState({ completed: true, showReady: true });
+        // Mark onboarding complete. Optionally preserve legacy ready screen behavior.
+        writeOnboardingState({ completed: true, showReady });
 
         // Ensure auth/diagnostics are in sync now that onboarding is done.
         try {
@@ -1939,23 +2024,28 @@ async function setupOnboardingIpc() {
             logger.warn('[onboarding] failed to register runtime listeners', e);
         }
 
-        // Show the ready view in the existing onboarding window.
-        try {
-            if (onboardingWindow && !onboardingWindow.isDestroyed()) {
-                onboardingWindow.setSize(440, 460, true);
-                onboardingWindow.center();
-                onboardingWindow.webContents.send('onboarding:init', {
-                    view: 'ready',
-                    firstName: cachedUserFirstName,
-                    permissions: getPermissionsBooleans(),
-                });
-                bringOnboardingToFront('onboarding-complete-ready');
+        if (showReady) {
+            // Show the ready view in the existing onboarding window.
+            try {
+                if (onboardingWindow && !onboardingWindow.isDestroyed()) {
+                    onboardingWindow.setSize(440, 460, true);
+                    onboardingWindow.center();
+                    onboardingWindow.webContents.send('onboarding:init', {
+                        view: 'ready',
+                        firstName: cachedUserFirstName,
+                        permissions: getPermissionsBooleans(),
+                    });
+                    bringOnboardingToFront('onboarding-complete-ready');
+                }
+            } catch (e) {
+                logger.warn('[onboarding] failed to show ready view', e);
             }
-        } catch (e) {
-            logger.warn('[onboarding] failed to show ready view', e);
+        } else {
+            closeOnboardingPopup();
+            refreshTrayMenu();
         }
 
-        return { success: true };
+        return { success: true, readyShown: showReady };
     });
 
     ipcMain.handle('onboarding:get-started', async () => {
@@ -2540,6 +2630,9 @@ async function bootstrap() {
         RecallAiSdk.init({
             // NOTE: Recall SDK expects `apiUrl` (camelCase)
             apiUrl: 'https://us-east-1.recall.ai',
+            // Never auto-open OS permission dialogs on app launch.
+            // Permissions are requested only from the onboarding permissions UI.
+            acquirePermissionsOnStartup: [],
         });
         sdkInitialized = true;
 
@@ -2548,11 +2641,6 @@ async function bootstrap() {
 
         setupPermissionLogging({ onChange: onPermissionChange });
 
-        // Request permissions
-        logger.info('[permissions] requesting permissions');
-        RecallAiSdk.requestPermission('accessibility');
-        RecallAiSdk.requestPermission('microphone');
-        RecallAiSdk.requestPermission('screen-capture');
         ensureRecallRuntimeListenersRegistered();
     } else {
         logger.info('[app] onboarding not complete, SDK not initialized yet');
@@ -2570,23 +2658,31 @@ async function bootstrap() {
 
     logger.info('[onboarding] complete:', onboardingComplete, 'showReady:', showReady);
 
-    // If onboarding is complete and we need to show the ready screen (just restarted after permissions)
+    // If onboarding is complete and we need to continue post-permissions onboarding UI.
     if (onboardingComplete && showReady) {
         // Still sync auth state
         const auth = await isAuthenticated();
         api.setAuthToken(auth.accessToken);
         await syncUserIdFromProfile();
         sendDesktopSdkDiagnosticsIfNeeded();
+        refreshTrayMenu();
 
-        // Check if all permissions are actually granted before showing ready
+        if (!auth.authenticated) {
+            logger.info('[onboarding] showReady state but user is logged out, showing login');
+            showOnboardingPopup({ view: 'login' });
+            return;
+        }
+
+        // Check if all permissions are actually granted before showing the signed-in guide.
         if (!areAllPermissionsGranted()) {
             logger.info(
-                '[onboarding] missing permissions after restart, showing permissions instead of ready',
+                '[onboarding] missing permissions after restart, showing permissions before guide',
             );
             showOnboardingPopup({ view: 'permissions' });
         } else {
-            logger.info('[onboarding] showing ready screen after restart');
-            showOnboardingPopup({ view: 'ready' });
+            logger.info('[onboarding] showing signed-in guide after restart');
+            clearShowReadyFlag();
+            showOnboardingPopup({ view: 'signed-in' });
         }
         return;
     }
