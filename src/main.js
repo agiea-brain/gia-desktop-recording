@@ -44,6 +44,7 @@ logger.configure({
 logger.setBaseContext({
     process: 'main',
     service: 'desktop-sdk',
+    platform: process.platform,
     userId: null,
     user_id: null,
 });
@@ -132,10 +133,11 @@ let isPaused = false;
 let meetingPopupWindow = null;
 let debugControlsWindow = null;
 let onboardingWindow = null;
-let currentMeetingInfo = null; // { windowId, meetingUrl, uploadToken, recordingId, sdkUploadId, lastRegisteredMeetingUrl, lastRegisterAttemptUrl, lastRegisterAttemptAt }
+let currentMeetingInfo = null; // { windowId, meetingUrl, meetingUrlSource, meetingUrlUpdatedAt, meetingDetectedAt, uploadToken, recordingId, sdkUploadId, lastRegisteredMeetingUrl, lastRegisterAttemptUrl, lastRegisterAttemptAt }
 let userWantsToRecord = false; // Set to true when user confirms they want to record
 let recordingStarted = false; // Ensures recording only starts once per meeting
 let userStoppedRecording = false; // True when user manually stopped — keeps currentMeetingInfo alive on idle
+let meetingUrlFallbackTimer = null; // Fallback timer for URL registration when meeting-updated is delayed
 
 function bringWindowToFront(win, reason = 'unknown') {
     try {
@@ -768,12 +770,13 @@ function getMacAppIconPath() {
               path.join(process.resourcesPath, 'gia-tray.png'),
           ]
         : [
-              path.join(process.cwd(), 'src', 'assets', 'gia-app.icns'),
-              path.join(app.getAppPath(), 'src', 'assets', 'gia-app.icns'),
-              path.resolve(__dirname, '..', '..', 'src', 'assets', 'gia-app.icns'),
+              // Prefer PNG — nativeImage can't decode .icns in dev mode
               path.join(process.cwd(), 'src', 'assets', 'gia-tray.png'),
               path.join(app.getAppPath(), 'src', 'assets', 'gia-tray.png'),
               path.resolve(__dirname, '..', '..', 'src', 'assets', 'gia-tray.png'),
+              path.join(process.cwd(), 'src', 'assets', 'gia-app.icns'),
+              path.join(app.getAppPath(), 'src', 'assets', 'gia-app.icns'),
+              path.resolve(__dirname, '..', '..', 'src', 'assets', 'gia-app.icns'),
           ];
 
     for (const p of candidates) {
@@ -920,18 +923,27 @@ async function startMeetingRecordingWithAuth({ source = 'unknown' } = {}) {
 
         await getUploadTokenAndStoreInfo();
         logger.info(`[recall] uploadToken: ${currentMeetingInfo.uploadToken}`);
+        // Attempt registration — will proceed only if URL is from meeting-updated (fresh).
+        // If URL is only from meeting-detected (potentially stale), this is a no-op and
+        // the fallback timer below will handle it.
         await registerCurrentMeetingUrlIfNeeded();
         if (!currentMeetingInfo.lastRegisteredMeetingUrl) {
             logger.info(
-                '[recall] meeting URL not yet registered (URL=%s) — will register when meeting-updated provides it',
+                '[recall] meeting URL not yet registered (source=%s, URL=%s) — waiting for meeting-updated or fallback',
+                currentMeetingInfo.meetingUrlSource ?? 'none',
                 currentMeetingInfo.meetingUrl ?? 'null',
             );
+            // Start fallback timer: if no meeting-updated arrives within 15s,
+            // register with the seeded URL as a last resort (guarded).
+            scheduleMeetingUrlFallbackRegistration();
         } else {
             logger.info('[recall] meeting URL registration check complete');
         }
         await startMeetingRecording();
     } catch (error) {
         logger.error(`[recall] failed to start recording (source=${source}):`, error);
+        // Cancel fallback timer — recording never started, no URL to register.
+        cancelMeetingUrlFallbackTimer();
         // Keep meeting info so the user can retry while meeting is still active.
         userWantsToRecord = false;
         recordingStarted = false;
@@ -1534,6 +1546,7 @@ function ensureRecallRuntimeListenersRegistered() {
         }
 
         // Reset flags for new meeting
+        cancelMeetingUrlFallbackTimer();
         userWantsToRecord = false;
         recordingStarted = false;
         userStoppedRecording = false;
@@ -1547,6 +1560,9 @@ function ensureRecallRuntimeListenersRegistered() {
             currentMeetingInfo = {
                 windowId: windowId,
                 meetingUrl: evt.window?.url ?? null,
+                meetingUrlSource: evt.window?.url ? 'detected' : null,
+                meetingUrlUpdatedAt: evt.window?.url ? Date.now() : null,
+                meetingDetectedAt: Date.now(),
                 uploadToken: null,
                 recordingId: null,
                 sdkUploadId: null,
@@ -1634,6 +1650,7 @@ function ensureRecallRuntimeListenersRegistered() {
         const windowId = evt.window?.id ?? null;
         if (currentMeetingInfo && (!windowId || currentMeetingInfo.windowId === windowId)) {
             logger.info('[recall] clearing meeting info after meeting closed');
+            cancelMeetingUrlFallbackTimer();
             clearMeetingPopupSuppression(windowId);
             currentMeetingInfo = null;
             userWantsToRecord = false;
@@ -1660,7 +1677,16 @@ function ensureRecallRuntimeListenersRegistered() {
 
         // Always keep the latest meeting URL, but only call the API after user confirms.
         currentMeetingInfo.meetingUrl = meetingUrl;
-        logger.info('[recall] stored meeting URL (confirmed=%s)', userWantsToRecord);
+        currentMeetingInfo.meetingUrlSource = 'updated';
+        currentMeetingInfo.meetingUrlUpdatedAt = Date.now();
+        logger.info('[recall] stored meeting URL from meeting-updated (userConfirmed=%s)', userWantsToRecord);
+
+        // Fresh URL arrived — cancel fallback timer since we have a reliable URL now
+        if (meetingUrlFallbackTimer) {
+            clearTimeout(meetingUrlFallbackTimer);
+            meetingUrlFallbackTimer = null;
+            logger.info('[recall] cancelled URL registration fallback timer (fresh URL arrived)');
+        }
 
         if (!userWantsToRecord) {
             logger.info('[recall] deferring meeting URL registration until confirm');
@@ -1703,6 +1729,7 @@ function ensureRecallRuntimeListenersRegistered() {
                 if (wasRecording) {
                     clearMeetingPopupSuppression(currentMeetingInfo?.windowId);
                 }
+                cancelMeetingUrlFallbackTimer();
                 userWantsToRecord = false;
                 recordingStarted = false;
                 if (userStoppedRecording) {
@@ -1736,10 +1763,21 @@ function ensureRecallRuntimeListenersRegistered() {
         // Clear suppression so user can restart recording from tray
         const endedWindowId = evt.window?.id || currentMeetingInfo?.windowId;
         clearMeetingPopupSuppression(endedWindowId);
+        // Cancel any pending fallback URL registration
+        cancelMeetingUrlFallbackTimer();
         // Reset recording flags but keep currentMeetingInfo
-        // so "Start Recording" remains available while meeting is still active
+        // so "Start Recording" remains available while meeting is still active.
+        // Reset URL fields so a re-record doesn't reuse stale URL data.
         userWantsToRecord = false;
         recordingStarted = false;
+        if (currentMeetingInfo) {
+            currentMeetingInfo.meetingUrl = null;
+            currentMeetingInfo.meetingUrlSource = null;
+            currentMeetingInfo.meetingUrlUpdatedAt = null;
+            currentMeetingInfo.lastRegisteredMeetingUrl = null;
+            currentMeetingInfo.lastRegisterAttemptUrl = null;
+            currentMeetingInfo.lastRegisterAttemptAt = 0;
+        }
         refreshTrayMenu();
     });
 }
@@ -2114,6 +2152,54 @@ async function getUploadTokenAndStoreInfo() {
     }
 }
 
+function cancelMeetingUrlFallbackTimer() {
+    if (meetingUrlFallbackTimer) {
+        clearTimeout(meetingUrlFallbackTimer);
+        meetingUrlFallbackTimer = null;
+    }
+}
+
+/**
+ * Fallback: if meeting-updated hasn't arrived within 15s of recording start,
+ * attempt registration with the seeded detection URL (guarded).
+ * Only called when URL source is 'detected' at recording start time.
+ */
+function scheduleMeetingUrlFallbackRegistration() {
+    cancelMeetingUrlFallbackTimer();
+    const snapshotWindowId = currentMeetingInfo?.windowId;
+    meetingUrlFallbackTimer = setTimeout(async () => {
+        meetingUrlFallbackTimer = null;
+        // Safety: verify meeting is still active and same window
+        if (!currentMeetingInfo || currentMeetingInfo.windowId !== snapshotWindowId) {
+            logger.info('[recall] URL fallback skipped (meeting changed or cleared)');
+            return;
+        }
+        // If a fresh URL arrived in the meantime, no need for fallback
+        if (currentMeetingInfo.meetingUrlSource === 'updated') {
+            logger.info('[recall] URL fallback skipped (fresh URL already arrived)');
+            return;
+        }
+        if (currentMeetingInfo.lastRegisteredMeetingUrl) {
+            logger.info('[recall] URL fallback skipped (already registered)');
+            return;
+        }
+        if (!currentMeetingInfo.recordingId || !currentMeetingInfo.sdkUploadId) {
+            logger.info('[recall] URL fallback skipped (missing recordingId/sdkUploadId)');
+            return;
+        }
+        // Don't register with detected-only URL — it may be stale/cached from a
+        // previous meeting. A missing URL is safer than a wrong one (data integrity).
+        // The URL will get registered if/when meeting-updated eventually fires.
+        logger.warn(
+            '[recall] URL fallback: no fresh meeting-updated arrived within 15s. ' +
+            'Skipping registration to avoid stale URL. detected_url=%s, windowId=%s, recordingId=%s',
+            currentMeetingInfo.meetingUrl,
+            currentMeetingInfo.windowId,
+            currentMeetingInfo.recordingId,
+        );
+    }, 15_000);
+}
+
 async function registerCurrentMeetingUrlIfNeeded() {
     if (!currentMeetingInfo) {
         logger.info('[recall] register meeting URL skipped (no meeting info)');
@@ -2123,6 +2209,17 @@ async function registerCurrentMeetingUrlIfNeeded() {
     const meetingUrl = currentMeetingInfo.meetingUrl ?? null;
     if (!meetingUrl) {
         logger.info('[recall] register meeting URL skipped (no meeting URL yet)');
+        return;
+    }
+
+    // Gate: only register URLs confirmed by meeting-updated (fresh from SDK).
+    // Seeded URLs from meeting-detected can be stale/cached from a previous meeting,
+    // causing back-to-back meetings to get linked to the wrong meeting.
+    if (currentMeetingInfo.meetingUrlSource === 'detected') {
+        logger.info(
+            '[recall] register meeting URL deferred (URL from detection only, waiting for meeting-updated; url=%s)',
+            meetingUrl,
+        );
         return;
     }
 
@@ -2158,7 +2255,7 @@ async function registerCurrentMeetingUrlIfNeeded() {
     }
 
     try {
-        logger.info('[recall] registering meeting URL...');
+        logger.info('[recall] registering meeting URL... (source=%s)', currentMeetingInfo.meetingUrlSource);
         const accessToken = await ensureAccessToken({ interactive: false });
         if (!accessToken) {
             logger.info('[recall] cannot register meeting URL (not authenticated)');
