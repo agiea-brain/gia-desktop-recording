@@ -16,18 +16,6 @@ npm install
 npm start
 ```
 
-## Build & Package
-
-```shell
-# Package the app (without creating an installer)
-npm run package
-
-# Build distributable installer
-# macOS: creates .dmg
-# Windows: creates Squirrel Setup.exe
-npm run make
-```
-
 ## Platform Notes
 
 ### macOS
