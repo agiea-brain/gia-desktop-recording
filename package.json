@@ -1,65 +1,65 @@
 {
-    "name": "gia-desktop-meeting-recording",
-    "productName": "Gia",
-    "version": "0.0.8",
-    "description": "Gia",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/agiea-brain/gia-desktop-recording.git"
-    },
-    "main": ".webpack/main",
-    "scripts": {
-        "start": "electron-forge start",
-        "dev": "electron-forge start",
-        "package": "electron-forge package",
-        "make": "electron-forge make",
-        "make:mac": "rm -rf out .webpack && GIA_MAC_SIGN=1 npm run make && xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile \"gia-notarize\" --wait",
-        "publish": "electron-forge publish",
-        "format": "prettier --write 'src/**/*.{js,html,css,json}'",
-        "lint": "echo \"No linting configured\"",
-        "start:server": "node ./src/server.js",
-	"postinstall": "node -e \"const fs=require('fs');const src='node_modules/@electron/windows-sign';const dst='node_modules/@electron/packager/node_modules/@electron/windows-sign';if(fs.existsSync(src)&&fs.existsSync(dst)){fs.rmSync(dst,{recursive:true});fs.cpSync(src,dst,{recursive:true});console.log('Patched @electron/windows-sign in packager')}\""
-    },
-    "keywords": [],
-    "author": {
-        "name": "Sanjeevi",
-        "email": "sanjeevi@myagiea.com"
-    },
-    "license": "MIT",
-    "devDependencies": {
-        "@babel/plugin-proposal-class-properties": "^7.18.6",
-        "@electron-forge/cli": "^7.8.0",
-        "@electron-forge/maker-deb": "^7.8.0",
-        "@electron-forge/maker-dmg": "^7.8.1",
-        "@electron-forge/maker-rpm": "^7.8.0",
-        "@electron-forge/maker-squirrel": "^7.8.0",
-        "@electron-forge/maker-zip": "^7.8.0",
-        "@electron-forge/plugin-auto-unpack-natives": "^7.8.0",
-        "@electron-forge/plugin-fuses": "^7.8.0",
-        "@electron-forge/plugin-webpack": "^7.8.0",
-        "@electron/fuses": "^1.8.0",
-        "@electron/windows-sign": "^2.0.2",
-        "@vercel/webpack-asset-relocator-loader": "^1.7.3",
-        "cross-env": "^10.1.0",
-        "css-loader": "^6.11.0",
-        "dotenv-cli": "^11.0.0",
-        "electron": "41.0.4",
-        "node-loader": "^2.1.0",
-        "prettier": "^3.8.1",
-        "style-loader": "^3.3.4"
-    },
-    "overrides": {
-        "@electron/packager": {
-            "@electron/osx-sign": "github:recallai/osx-sign"
-        }
-    },
-    "dependencies": {
-        "@recallai/desktop-sdk": "2.0.10",
-        "@timfish/forge-externals-plugin": "^0.2.1",
-        "axios": "^1.13.6",
-        "dotenv": "^16.6.1",
-        "electron-squirrel-startup": "^1.0.1",
-        "express": "^4.18.2",
-        "update-electron-app": "^3.1.2"
+  "name": "gia-desktop-meeting-recording",
+  "productName": "Gia",
+  "version": "0.0.10",
+  "description": "Gia",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agiea-brain/gia-desktop-recording.git"
+  },
+  "main": ".webpack/main",
+  "scripts": {
+    "start": "electron-forge start",
+    "dev": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "make:mac": "rm -rf out .webpack && GIA_MAC_SIGN=1 npm run make && xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile \"gia-notarize\" --wait",
+    "publish": "electron-forge publish",
+    "format": "prettier --write 'src/**/*.{js,html,css,json}'",
+    "lint": "echo \"No linting configured\"",
+    "start:server": "node ./src/server.js",
+    "postinstall": "node -e \"const fs=require('fs');const src='node_modules/@electron/windows-sign';const dst='node_modules/@electron/packager/node_modules/@electron/windows-sign';if(fs.existsSync(src)&&fs.existsSync(dst)){fs.rmSync(dst,{recursive:true});fs.cpSync(src,dst,{recursive:true});console.log('Patched @electron/windows-sign in packager')}\""
+  },
+  "keywords": [],
+  "author": {
+    "name": "Sanjeevi",
+    "email": "sanjeevi@myagiea.com"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/plugin-proposal-class-properties": "^7.18.6",
+    "@electron-forge/cli": "^7.8.0",
+    "@electron-forge/maker-deb": "^7.8.0",
+    "@electron-forge/maker-dmg": "^7.8.1",
+    "@electron-forge/maker-rpm": "^7.8.0",
+    "@electron-forge/maker-squirrel": "^7.8.0",
+    "@electron-forge/maker-zip": "^7.8.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.8.0",
+    "@electron-forge/plugin-fuses": "^7.8.0",
+    "@electron-forge/plugin-webpack": "^7.8.0",
+    "@electron/fuses": "^1.8.0",
+    "@electron/windows-sign": "^2.0.2",
+    "@vercel/webpack-asset-relocator-loader": "^1.7.3",
+    "cross-env": "^10.1.0",
+    "css-loader": "^6.11.0",
+    "dotenv-cli": "^11.0.0",
+    "electron": "41.0.4",
+    "node-loader": "^2.1.0",
+    "prettier": "^3.8.1",
+    "style-loader": "^3.3.4"
+  },
+  "overrides": {
+    "@electron/packager": {
+      "@electron/osx-sign": "github:recallai/osx-sign"
     }
+  },
+  "dependencies": {
+    "@recallai/desktop-sdk": "2.0.10",
+    "@timfish/forge-externals-plugin": "^0.2.1",
+    "axios": "^1.13.6",
+    "dotenv": "^16.6.1",
+    "electron-squirrel-startup": "^1.0.1",
+    "express": "^4.18.2",
+    "update-electron-app": "^3.1.2"
+  }
 }
