@@ -296,6 +296,36 @@ function buildAppVersionString() {
     }
 }
 
+function getRecallSdkVersion() {
+    try {
+        const appPackageJsonPath = path.join(app.getAppPath(), 'package.json');
+        const appPackageJson = JSON.parse(fs.readFileSync(appPackageJsonPath, 'utf8'));
+        const declaredVersion = appPackageJson?.dependencies?.['@recallai/desktop-sdk'];
+        if (typeof declaredVersion === 'string' && declaredVersion.length > 0) {
+            return declaredVersion;
+        }
+    } catch (e) {
+        logger.warn('[app] failed to read Recall SDK version from app package.json', {
+            error: e?.message,
+        });
+    }
+
+    try {
+        const sdkEntryPath = require.resolve('@recallai/desktop-sdk');
+        const sdkPackageJsonPath = path.join(path.dirname(sdkEntryPath), 'package.json');
+        const sdkPackageJson = JSON.parse(fs.readFileSync(sdkPackageJsonPath, 'utf8'));
+        if (typeof sdkPackageJson.version === 'string' && sdkPackageJson.version.length > 0) {
+            return sdkPackageJson.version;
+        }
+    } catch (e) {
+        logger.warn('[app] failed to resolve Recall SDK version', {
+            error: e?.message,
+        });
+    }
+
+    return null;
+}
+
 function buildPermissionsDiagnostics() {
     // Include both OS-level permission state and the latest Recall SDK status events.
     const osPermissions = readPermissionStates();
@@ -2600,7 +2630,12 @@ async function bootstrap() {
     }
 
     logger.info('[app] starting Gia');
-    logger.info('[app] version:', app.getVersion());
+    logger.info(
+        '[app] version:',
+        app.getVersion(),
+        'recall-sdk:',
+        getRecallSdkVersion(),
+    );
 
     setMacAppIcon();
 
