@@ -71,6 +71,12 @@ rm -rf out .webpack && GIA_MAC_SIGN=1 npm run make
 xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile "gia-notarize" --wait
 xcrun stapler staple ./out/make/Gia-*.dmg
 xcrun stapler validate ./out/make/Gia-*.dmg
+
+
+OR for mac there is a pre-exisiting command in package.json which 
+- make the app
+- notarize it
+command: npm run make:mac
 ```
 
 ## Release Packaging for Windows
