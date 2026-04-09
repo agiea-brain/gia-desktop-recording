@@ -41,10 +41,11 @@ class Api {
         }
     }
 
-    async getUploadToken() {
+    async getUploadToken({ meetingUrl } = {}) {
         if (!this.authToken) {
             throw new Error('Missing auth token (call setAuthToken first)');
         }
+        const hasMeetingUrl = typeof meetingUrl === 'string' && meetingUrl.length > 0;
         const response = await this._fetch(`${this.apiUrl}${apiRoutes.getUploadToken}`, {
             method: 'POST',
             headers: {
@@ -52,6 +53,7 @@ class Api {
                 Accept: 'application/json',
                 Authorization: `Bearer ${this.authToken}`,
             },
+            body: hasMeetingUrl ? JSON.stringify({ meetingUrl }) : undefined,
         });
         if (!response.ok) {
             const body = await response.text().catch(() => '');
