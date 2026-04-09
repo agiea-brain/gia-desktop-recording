@@ -2128,9 +2128,13 @@ async function getUploadTokenAndStoreInfo() {
     // Get upload token if we don't have it yet
     if (!currentMeetingInfo.uploadToken) {
         logger.info('[recall] requesting upload token...');
+        const meetingUrl = currentMeetingInfo.meetingUrl || null;
+        if (meetingUrl) {
+            logger.info('[recall] sending meeting URL with upload token request:', meetingUrl);
+        }
         let uploadTokenData;
         try {
-            uploadTokenData = await api.getUploadToken();
+            uploadTokenData = await api.getUploadToken(meetingUrl ? { meetingUrl } : {});
         } catch (error) {
             logger.error('[recall] failed to get upload token:', error);
             await showUploadTokenErrorDialog(error);
