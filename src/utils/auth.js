@@ -491,7 +491,16 @@ async function refreshAccessToken({ domain, clientId, refreshToken }) {
     });
 
     const bodyText = await tokenRes.text();
-    if (!tokenRes.ok) throw new Error(`Refresh failed: ${bodyText}`);
+    if (!tokenRes.ok) {
+        const err = new Error(`Refresh failed: ${bodyText}`);
+        try {
+            const parsed = JSON.parse(bodyText);
+            if (parsed?.error) err.oauthError = parsed.error;
+        } catch {
+            // keep original error message when response is not JSON
+        }
+        throw err;
+    }
     return JSON.parse(bodyText);
 }
 
@@ -536,9 +545,15 @@ export async function getStoredAccessToken({ allowRefresh = true } = {}) {
         logger.warn('[auth] refresh token exchange failed', {
             error: e?.message || String(e),
         });
-        // Preserve the refresh_token so the next attempt can retry.
-        // Only wipe everything when there's no refresh_token left to try.
-        if (stored.refresh_token) {
+        // `invalid_grant` means the refresh token is no longer usable.
+        // Clear storage to force a clean interactive login instead of retry loops.
+        const msg = String(e?.message || '');
+        const isInvalidGrant =
+            e?.oauthError === 'invalid_grant' || msg.includes('"error":"invalid_grant"');
+        if (isInvalidGrant) {
+            await clearStoredTokens();
+        } else if (stored.refresh_token) {
+            // Preserve the refresh_token so the next attempt can retry.
             await writeStoredTokens({
                 ...stored,
                 access_token: null,
