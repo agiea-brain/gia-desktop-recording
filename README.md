@@ -67,6 +67,9 @@ Optional:
 # Build DMG file
 rm -rf out .webpack && GIA_MAC_SIGN=1 npm run make
 
+# Verify code signing
+codesign -dvvv ./out/Gia-darwin-arm64/Gia.app
+
 # Notarize DMG
 xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile "gia-notarize" --wait
 xcrun stapler staple ./out/make/Gia-*.dmg
