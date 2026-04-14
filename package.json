@@ -1,7 +1,7 @@
 {
   "name": "gia-desktop-meeting-recording",
   "productName": "Gia",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "Gia",
   "repository": {
     "type": "git",
@@ -13,7 +13,7 @@
     "dev": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
-    "make:mac": "rm -rf out .webpack && GIA_MAC_SIGN=1 npm run make && xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile \"gia-notarize\" --wait",
+    "make:mac": "rm -rf out .webpack && npm install && GIA_MAC_SIGN=1 npm run make && xcrun notarytool submit ./out/make/Gia-*.dmg --keychain-profile \"gia-notarize\" --wait",
     "publish": "electron-forge publish",
     "format": "prettier --write 'src/**/*.{js,html,css,json}'",
     "lint": "echo \"No linting configured\"",
@@ -54,7 +54,7 @@
     }
   },
   "dependencies": {
-    "@recallai/desktop-sdk": "2.0.10",
+    "@recallai/desktop-sdk": "2.0.11",
     "@timfish/forge-externals-plugin": "^0.2.1",
     "axios": "^1.13.6",
     "dotenv": "^16.6.1",
