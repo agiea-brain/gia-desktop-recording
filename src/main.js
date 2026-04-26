@@ -6,6 +6,7 @@ import {
     ipcMain,
     Menu,
     nativeImage,
+    screen,
     shell,
     systemPreferences,
     Tray,
@@ -131,6 +132,7 @@ let isRecording = false;
 let isPaused = false;
 
 let meetingPopupWindow = null;
+let recordingSavedToastWindow = null;
 let debugControlsWindow = null;
 let onboardingWindow = null;
 let currentMeetingInfo = null; // { windowId, meetingUrl, meetingUrlSource, meetingUrlUpdatedAt, meetingDetectedAt, uploadToken, recordingId, sdkUploadId, lastRegisteredMeetingUrl, lastRegisterAttemptUrl, lastRegisterAttemptAt }
@@ -1304,6 +1306,31 @@ function getMeetingPopupPath() {
     return candidates[0];
 }
 
+function getRecordingSavedToastPath() {
+    if (app.isPackaged) {
+        const resourcePath = path.join(process.resourcesPath, 'recording-saved-toast.html');
+        if (fs.existsSync(resourcePath)) return resourcePath;
+        logger.error('[toast] toast HTML not found at:', resourcePath);
+    }
+
+    const candidates = [
+        path.join(process.cwd(), 'src', 'recording-saved-toast.html'),
+        path.join(app.getAppPath(), 'src', 'recording-saved-toast.html'),
+        path.resolve(__dirname, '..', '..', 'src', 'recording-saved-toast.html'),
+        path.resolve(__dirname, '..', 'recording-saved-toast.html'),
+    ];
+
+    for (const p of candidates) {
+        try {
+            if (fs.existsSync(p)) return p;
+        } catch {
+            // ignore and try next candidate
+        }
+    }
+
+    return candidates[0];
+}
+
 function getDebugControlsPath() {
     // In production, the file can be copied to Resources via forge extraResource.
     if (app.isPackaged) {
@@ -1790,6 +1817,7 @@ function ensureRecallRuntimeListenersRegistered() {
                 closeMeetingPopup();
             }, 100);
         }
+        showRecordingSavedToast();
         // Clear suppression so user can restart recording from tray
         const endedWindowId = evt.window?.id || currentMeetingInfo?.windowId;
         clearMeetingPopupSuppression(endedWindowId);
@@ -2117,6 +2145,88 @@ function closeMeetingPopup() {
     if (meetingPopupWindow && !meetingPopupWindow.isDestroyed()) {
         meetingPopupWindow.destroy();
         meetingPopupWindow = null;
+    }
+}
+
+function showRecordingSavedToast() {
+    if (recordingSavedToastWindow && !recordingSavedToastWindow.isDestroyed()) {
+        recordingSavedToastWindow.destroy();
+        recordingSavedToastWindow = null;
+    }
+
+    const TOAST_WIDTH = 320;
+    const TOAST_HEIGHT = 80;
+    const TOAST_MARGIN = 16;
+
+    const display = screen.getPrimaryDisplay();
+    const { x: waX, y: waY, width: waW, height: waH } = display.workArea;
+    const x = Math.round(waX + waW - TOAST_WIDTH - TOAST_MARGIN);
+    const y = Math.round(waY + waH - TOAST_HEIGHT - TOAST_MARGIN);
+
+    recordingSavedToastWindow = new BrowserWindow({
+        width: TOAST_WIDTH,
+        height: TOAST_HEIGHT,
+        x,
+        y,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        closable: false,
+        alwaysOnTop: true,
+        frame: false,
+        transparent: true,
+        backgroundColor: '#00000000',
+        hasShadow: false,
+        focusable: false,
+        skipTaskbar: true,
+        show: false,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            preload: getPreloadPath('recording-saved-toast-preload.js'),
+        },
+    });
+
+    recordingSavedToastWindow.setAlwaysOnTop(true, 'screen-saver');
+    recordingSavedToastWindow.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true,
+    });
+
+    recordingSavedToastWindow.loadFile(getRecordingSavedToastPath());
+
+    recordingSavedToastWindow.webContents.on('did-finish-load', () => {
+        try {
+            const iconPath = getTrayIconPath();
+            const img = nativeImage.createFromPath(iconPath);
+            const dataUrl = img?.isEmpty?.() ? null : img.toDataURL();
+            if (recordingSavedToastWindow && !recordingSavedToastWindow.isDestroyed()) {
+                recordingSavedToastWindow.webContents.send('recording-saved-toast:logo', {
+                    dataUrl,
+                });
+            }
+        } catch (e) {
+            logger.error('[toast] failed to send logo:', e);
+        }
+    });
+
+    recordingSavedToastWindow.once('ready-to-show', () => {
+        recordingSavedToastWindow?.showInactive();
+    });
+
+    recordingSavedToastWindow.on('closed', () => {
+        recordingSavedToastWindow = null;
+    });
+
+    recordingSavedToastWindow.webContents.on('will-navigate', (e) => {
+        e.preventDefault();
+    });
+}
+
+function closeRecordingSavedToast() {
+    if (recordingSavedToastWindow && !recordingSavedToastWindow.isDestroyed()) {
+        recordingSavedToastWindow.destroy();
+        recordingSavedToastWindow = null;
     }
 }
 
@@ -2476,6 +2586,10 @@ async function setupMeetingPopupIpc() {
         if (meetingPopupWindow && !meetingPopupWindow.isDestroyed()) {
             meetingPopupWindow.minimize();
         }
+    });
+
+    ipcMain.handle('recording-saved-toast:dismiss', async () => {
+        closeRecordingSavedToast();
     });
 
     ipcMain.handle('meeting-popup:end-recording', async () => {

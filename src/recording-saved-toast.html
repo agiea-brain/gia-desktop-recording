@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+        />
+        <meta name="application-name" content="Gia" />
+        <title>Recording saved</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                background: transparent;
+                overflow: hidden;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+                font-family:
+                    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                    'Helvetica Neue', Arial, sans-serif;
+            }
+
+            body {
+                width: 100vw;
+                height: 100vh;
+                padding: 8px;
+            }
+
+            .toast {
+                position: relative;
+                width: 100%;
+                height: 100%;
+                background: #ffffff;
+                border-radius: 12px;
+                box-shadow:
+                    0 10px 24px rgba(0, 0, 0, 0.18),
+                    0 2px 6px rgba(0, 0, 0, 0.08);
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 12px 36px 12px 14px;
+                color: hsl(0, 0%, 9%);
+                animation: slide-in 180ms ease-out;
+            }
+
+            @keyframes slide-in {
+                from {
+                    transform: translateY(8px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateY(0);
+                    opacity: 1;
+                }
+            }
+
+            .logo {
+                width: 28px;
+                height: 28px;
+                flex: 0 0 28px;
+                border-radius: 6px;
+                object-fit: cover;
+                background: hsl(0, 0%, 96.1%);
+            }
+
+            .text {
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 2px;
+                min-width: 0;
+            }
+
+            .title {
+                font-size: 14px;
+                font-weight: 600;
+                line-height: 1.2;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .subtitle {
+                font-size: 12px;
+                font-weight: 400;
+                line-height: 1.2;
+                color: hsl(0, 0%, 45.1%);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .close {
+                position: absolute;
+                top: 6px;
+                right: 6px;
+                width: 20px;
+                height: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                color: hsl(0, 0%, 45.1%);
+                font-size: 14px;
+                line-height: 1;
+                padding: 0;
+            }
+
+            .close:hover {
+                background: hsl(0, 0%, 94%);
+                color: hsl(0, 0%, 9%);
+            }
+
+            .close svg {
+                width: 10px;
+                height: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="toast" role="status" aria-live="polite">
+            <img class="logo" id="logo" alt="" />
+            <div class="text">
+                <div class="title">Recording saved</div>
+                <div class="subtitle">Generating summary…</div>
+            </div>
+            <button class="close" id="close" aria-label="Dismiss">
+                <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                    <path d="M1 1 L9 9 M9 1 L1 9" />
+                </svg>
+            </button>
+        </div>
+
+        <script>
+            (function () {
+                const AUTO_DISMISS_MS = 15000;
+                const closeBtn = document.getElementById('close');
+                const logoImg = document.getElementById('logo');
+                let dismissed = false;
+                let timer = null;
+
+                function dismiss() {
+                    if (dismissed) return;
+                    dismissed = true;
+                    if (timer) {
+                        clearTimeout(timer);
+                        timer = null;
+                    }
+                    try {
+                        window.electronAPI?.dismiss();
+                    } catch (_) {
+                        // window will be torn down by main process
+                    }
+                }
+
+                if (window.electronAPI?.onLogo) {
+                    window.electronAPI.onLogo((payload) => {
+                        if (payload?.dataUrl) {
+                            logoImg.src = payload.dataUrl;
+                        }
+                    });
+                }
+
+                closeBtn.addEventListener('click', dismiss);
+                timer = setTimeout(dismiss, AUTO_DISMISS_MS);
+            })();
+        </script>
+    </body>
+</html>
