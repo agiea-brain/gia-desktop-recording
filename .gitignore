@@ -101,3 +101,4 @@ out/
 .env.trustedsigning
 electron-windows-sign.log
 build/
+.serena/
