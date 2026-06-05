@@ -1,7 +1,7 @@
 {
   "name": "gia-desktop-meeting-recording",
   "productName": "Gia",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "description": "Gia",
   "repository": {
     "type": "git",
@@ -51,12 +51,18 @@
   "overrides": {
     "@electron/packager": {
       "@electron/osx-sign": "github:recallai/osx-sign"
+    },
+    "tar": "^7.5.16",
+    "tmp": "^0.2.7",
+    "webpack-dev-server": "^5.2.4",
+    "sockjs": {
+      "uuid": "^11.1.1"
     }
   },
   "dependencies": {
-    "@recallai/desktop-sdk": "2.0.15",
+    "@recallai/desktop-sdk": "2.0.16",
     "@timfish/forge-externals-plugin": "^0.2.1",
-    "axios": "1.15.0",
+    "axios": "1.16.1",
     "dotenv": "^16.6.1",
     "electron-squirrel-startup": "^1.0.1",
     "express": "^4.18.2",
