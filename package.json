@@ -60,7 +60,7 @@
     }
   },
   "dependencies": {
-    "@recallai/desktop-sdk": "2.0.24",
+    "@recallai/desktop-sdk": "2.0.26",
     "@timfish/forge-externals-plugin": "^0.2.1",
     "axios": "1.16.1",
     "dotenv": "^16.6.1",
