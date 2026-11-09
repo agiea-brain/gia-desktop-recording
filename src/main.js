@@ -6,6 +6,7 @@ import {
     ipcMain,
     Menu,
     nativeImage,
+    nativeTheme,
     screen,
     shell,
     systemPreferences,
@@ -524,6 +525,26 @@ function getPermissionsBooleans() {
     };
 }
 
+// Raw OS statuses for the onboarding popup (strings, not booleans).
+// microphone/screen: granted | denied | not-determined | restricted | unknown | unsupported
+// accessibility: granted | denied | unknown
+function getPermissionStatuses() {
+    const p = readPermissionStates();
+    // Electron reports screen recording as 'denied' even before it was ever asked
+    // (there is no 'not-determined' for that TCC class). Only call it denied once
+    // we know a request has been made; otherwise the row must offer "Allow".
+    const screen =
+        p.screenCapture === 'denied' && !readOnboardingState().screenRequested
+            ? 'not-determined'
+            : p.screenCapture;
+    return {
+        microphone: p.microphone,
+        accessibility:
+            p.accessibility === true ? 'granted' : p.accessibility === false ? 'denied' : 'unknown',
+        screen,
+    };
+}
+
 function hasActiveMeetingWaitingForRecording() {
     return !!currentMeetingInfo && !isRecording;
 }
@@ -594,6 +615,12 @@ function onPermissionChange({ prev, next, reason }) {
 
 let accessibilityTrustedAtStartup = null; // true/false/null (unknown)
 let accessibilityRelaunchInFlight = false;
+// Reason string while a relaunch is held back because the onboarding popup is open.
+let relaunchPending = null;
+// Quit means quit: a deferred relaunch must not fire from the popup closing on the way out.
+app.on('before-quit', () => {
+    relaunchPending = null;
+});
 
 function captureAccessibilityTrustedAtStartupOnce() {
     if (accessibilityTrustedAtStartup !== null) return accessibilityTrustedAtStartup;
@@ -606,6 +633,14 @@ function captureAccessibilityTrustedAtStartupOnce() {
 
 async function relaunchApp({ reason = 'unknown' } = {}) {
     if (accessibilityRelaunchInFlight) return;
+
+    // The popup's own flow (Continue → Ready → Get started) restarts the app, so don't
+    // interrupt it with a native dialog. If the popup closes first, we relaunch then.
+    if (onboardingWindow && !onboardingWindow.isDestroyed()) {
+        relaunchPending = reason;
+        logger.info('[app] relaunch deferred (onboarding popup open)', { reason });
+        return;
+    }
     accessibilityRelaunchInFlight = true;
 
     logger.info('[app] relaunch requested', { reason });
@@ -754,10 +789,17 @@ function shouldShowReadyScreen() {
     return state.showReady === true;
 }
 
-function clearShowReadyFlag() {
-    const state = readOnboardingState();
-    writeOnboardingState({ ...state, showReady: false });
+// Remember the furthest onboarding view reached, so a relaunch can say "welcome back".
+function markLastView(view) {
+    writeOnboardingState({ ...readOnboardingState(), lastView: view });
 }
+
+function hadReachedPermissions() {
+    return readOnboardingState().lastView === 'permissions';
+}
+
+// The badge is a startup thing: only the first permissions popup of this process may show it.
+let welcomeBackOffered = false;
 
 function setupAppLoggingIpc() {
     // Renderer/popup processes send logs here so everything routes through Logfire.
@@ -1481,6 +1523,10 @@ function getOnboardingPopupPath() {
     return candidates[0];
 }
 
+// One size for every onboarding view (login, permissions, ready): no resizing between steps.
+const ONBOARDING_WINDOW = { width: 520, height: 600 };
+const ONBOARDING_BG = { light: '#ffffff', dark: '#1c1c1e' };
+
 function showOnboardingPopup({ view = 'login', message = null } = {}) {
     // Close existing onboarding window if any
     if (onboardingWindow && !onboardingWindow.isDestroyed()) {
@@ -1488,11 +1534,17 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
     }
 
     const popupPath = getOnboardingPopupPath();
-    logger.info('[onboarding] showing popup, view:', view);
+    // Badge only when a previous session already reached the permissions view.
+    const welcomeBack = view === 'permissions' && !welcomeBackOffered && hadReachedPermissions();
+    if (view === 'permissions') {
+        welcomeBackOffered = true;
+        markLastView('permissions');
+    }
+    logger.info('[onboarding] showing popup, view:', view, { welcomeBack });
 
     onboardingWindow = new BrowserWindow({
-        width: 440,
-        height: view === 'ready' ? 460 : view === 'permissions' ? 520 : 480,
+        width: ONBOARDING_WINDOW.width,
+        height: ONBOARDING_WINDOW.height,
         resizable: false,
         minimizable: true,
         maximizable: false,
@@ -1500,7 +1552,7 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
         alwaysOnTop: false,
         frame: false,
         transparent: false,
-        backgroundColor: '#ffffff',
+        backgroundColor: nativeTheme.shouldUseDarkColors ? ONBOARDING_BG.dark : ONBOARDING_BG.light,
         icon: process.platform === 'win32' ? getWindowsAppIconPath() : undefined,
         show: false,
         skipTaskbar: false,
@@ -1531,6 +1583,8 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
                     message,
                     firstName: cachedUserFirstName,
                     permissions: getPermissionsBooleans(),
+                    statuses: getPermissionStatuses(),
+                    welcomeBack,
                     platform: process.platform,
                 });
             }
@@ -1545,8 +1599,16 @@ function showOnboardingPopup({ view = 'login', message = null } = {}) {
         onboardingWindow?.show();
     });
 
-    onboardingWindow.on('closed', () => {
-        onboardingWindow = null;
+    const thisWindow = onboardingWindow;
+    thisWindow.on('closed', () => {
+        // A newer popup may already have replaced this one; leave its reference alone.
+        if (onboardingWindow === thisWindow) onboardingWindow = null;
+        const popupStillOpen = onboardingWindow && !onboardingWindow.isDestroyed();
+        if (relaunchPending && !popupStillOpen) {
+            const reason = relaunchPending;
+            relaunchPending = null;
+            relaunchApp({ reason });
+        }
     });
 
     onboardingWindow.webContents.on('will-navigate', (e) => {
@@ -1934,6 +1996,8 @@ async function setupOnboardingIpc() {
             const accessToken = await ensureAccessToken({ interactive: true });
             if (accessToken) {
                 logger.info('[onboarding] login successful');
+                // The renderer moves to the permissions view on its own; remember it.
+                if (process.platform === 'darwin') markLastView('permissions');
                 return { success: true };
             } else {
                 logger.warn('[onboarding] login returned no token');
@@ -1977,6 +2041,10 @@ async function setupOnboardingIpc() {
             } catch (e) {
                 logger.warn('[onboarding] Recall SDK requestPermission threw', e);
             }
+            // From now on a 'denied' screen status is a real denial (see getPermissionStatuses).
+            if (permission === 'screen' && !readOnboardingState().screenRequested) {
+                writeOnboardingState({ ...readOnboardingState(), screenRequested: true });
+            }
 
             // Best-effort immediate snapshot (usually still false until user acts).
             const os = readPermissionStates();
@@ -1997,10 +2065,11 @@ async function setupOnboardingIpc() {
         try {
             const perms = getPermissionsBooleans();
             const granted = perms[permission] ?? false;
-            return { granted };
+            const status = getPermissionStatuses()[permission] ?? 'unknown';
+            return { granted, status };
         } catch (e) {
             logger.error('[onboarding] check permission failed:', e);
-            return { granted: false };
+            return { granted: false, status: 'unknown' };
         }
     });
 
@@ -2009,7 +2078,7 @@ async function setupOnboardingIpc() {
 
         // Mark onboarding complete. Set showReady so the ready screen
         // appears after restart (screen recording permission may force a restart).
-        writeOnboardingState({ completed: true, showReady: true });
+        writeOnboardingState({ ...readOnboardingState(), completed: true, showReady: true });
 
         // Ensure auth/diagnostics are in sync now that onboarding is done.
         try {
@@ -2038,12 +2107,12 @@ async function setupOnboardingIpc() {
         // Show the ready view in the existing onboarding window.
         try {
             if (onboardingWindow && !onboardingWindow.isDestroyed()) {
-                onboardingWindow.setSize(440, 460, true);
-                onboardingWindow.center();
                 onboardingWindow.webContents.send('onboarding:init', {
                     view: 'ready',
                     firstName: cachedUserFirstName,
                     permissions: getPermissionsBooleans(),
+                    statuses: getPermissionStatuses(),
+                    welcomeBack: false,
                 });
                 bringOnboardingToFront('onboarding-complete-ready');
             }
@@ -2057,8 +2126,11 @@ async function setupOnboardingIpc() {
     ipcMain.handle('onboarding:get-started', async () => {
         logger.info('[onboarding] user clicked get started, restarting app');
 
-        // Clear the show ready flag
-        clearShowReadyFlag();
+        // Onboarding is over: clear the ready flag and the remembered view together.
+        writeOnboardingState({ ...readOnboardingState(), showReady: false, lastView: null });
+
+        // We are about to relaunch anyway; a deferred accessibility relaunch must not double-fire.
+        relaunchPending = null;
 
         // Close the onboarding window
         closeOnboardingPopup();

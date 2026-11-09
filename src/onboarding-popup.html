@@ -9,17 +9,40 @@
         <meta name="application-name" content="Gia" />
         <title>Welcome to Gia</title>
         <style>
+            /* Every color comes from these tokens; dark mode only overrides the tokens. */
             :root {
-                --background: #ffffff;
-                --foreground: #0a0a0a;
+                --bg: #ffffff;
+                --fg: #0a0a0a;
                 --muted: #737373;
-                --border: #e5e5e5;
+                --muted2: #a3a3a3;
+                --line: #e5e5e5;
+                --line2: #d4d4d4;
+                --wash: #f5f5f5;
                 --primary: #171717;
                 --primary-fg: #fafafa;
-                --secondary: #f5f5f5;
-                --success: #16a34a;
-                --success-light: #dcfce7;
+                --ok: #16a34a;
+                --warn-bg: #fef3c7;
+                --warn-border: #f59e0b;
+                --warn-fg: #92400e;
                 --radius: 12px;
+            }
+
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --bg: #1c1c1e;
+                    --fg: #f5f5f5;
+                    --muted: #a1a1a6;
+                    --muted2: #6e6e73;
+                    --line: #2f2f33;
+                    --line2: #3f3f45;
+                    --wash: #28282c;
+                    --primary: #f5f5f5;
+                    --primary-fg: #111111;
+                    --ok: #4ade80;
+                    --warn-bg: #3a2e12;
+                    --warn-border: #a16207;
+                    --warn-fg: #fde68a;
+                }
             }
 
             * {
@@ -32,18 +55,20 @@
                 font-family:
                     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
                     sans-serif;
-                background: var(--background);
-                color: var(--foreground);
+                background: var(--bg);
+                color: var(--fg);
                 overflow: hidden;
                 -webkit-font-smoothing: antialiased;
+                user-select: none;
+                cursor: default;
             }
 
             /* Titlebar */
             .titlebar {
-                height: 40px;
+                height: 44px;
                 display: flex;
                 align-items: center;
-                padding: 0 14px;
+                padding: 0 16px;
                 -webkit-app-region: drag;
             }
 
@@ -72,21 +97,23 @@
             }
             .btn-maximize {
                 background: #28c840;
+                cursor: default;
             }
 
-            /* Layout */
+            /* Layout: 32px gutter on left, right and bottom, for every view */
             .container {
-                padding: 0 28px 28px;
+                padding: 4px 32px 32px;
                 -webkit-app-region: no-drag;
                 display: flex;
                 flex-direction: column;
-                height: calc(100vh - 40px);
+                height: calc(100vh - 44px);
             }
 
             .view {
                 display: none;
                 flex-direction: column;
                 flex: 1;
+                min-height: 0;
             }
             .view.active {
                 display: flex;
@@ -115,12 +142,18 @@
                 flex-shrink: 0;
             }
             .btn:hover:not(:disabled) {
-                background: #2a2a2a;
-                border-color: #2a2a2a;
+                background: color-mix(in srgb, var(--primary) 85%, var(--bg));
+                border-color: color-mix(in srgb, var(--primary) 85%, var(--bg));
             }
             .btn:disabled {
-                opacity: 0.4;
+                opacity: 0.35;
                 cursor: not-allowed;
+            }
+            .btn-inline {
+                width: auto;
+                padding: 11px 24px;
+                font-size: 14px;
+                border-radius: 11px;
             }
 
             /* Spinner */
@@ -159,7 +192,7 @@
                 font-weight: 700;
                 letter-spacing: -0.03em;
                 margin-bottom: 8px;
-                color: var(--foreground);
+                color: var(--fg);
             }
 
             .login-subtitle {
@@ -183,7 +216,7 @@
                 gap: 14px;
                 padding: 10px 0;
                 font-size: 14px;
-                color: var(--foreground);
+                color: var(--fg);
             }
 
             .feature-icon {
@@ -199,159 +232,41 @@
                 width: 18px;
                 height: 18px;
             }
+            /* Illustration tints: fixed hues, softened on a dark background via color-mix. */
             .feature-icon.mic {
-                background: #fef3c7;
+                background: color-mix(in srgb, #d97706 18%, var(--bg));
                 color: #d97706;
             }
             .feature-icon.transcript {
-                background: #dbeafe;
+                background: color-mix(in srgb, #2563eb 16%, var(--bg));
                 color: #2563eb;
             }
             .feature-icon.summary {
-                background: #dcfce7;
-                color: #16a34a;
+                background: color-mix(in srgb, var(--ok) 16%, var(--bg));
+                color: var(--ok);
             }
 
-            /* ==================== PERMISSIONS VIEW ==================== */
-            #permissionsView {
-                text-align: left;
-            }
-
-            .perm-heading {
-                font-size: 22px;
-                font-weight: 700;
-                letter-spacing: -0.03em;
-                margin-bottom: 6px;
-            }
-
-            .perm-subtitle {
-                font-size: 14px;
-                color: var(--muted);
-                line-height: 1.5;
-                margin-bottom: 20px;
-            }
-
-            /* Progress bar */
-            .progress-bar {
-                display: flex;
-                gap: 6px;
-                margin-bottom: 20px;
-            }
-            .progress-segment {
-                flex: 1;
-                height: 4px;
-                border-radius: 2px;
-                background: var(--border);
-                transition: background 0.3s ease;
-            }
-            .progress-segment.filled {
-                background: var(--primary);
-            }
-            .progress-segment.success {
-                background: var(--success);
-            }
-
-            /* Steps */
-            .stepper {
-                width: 100%;
-                margin-bottom: 20px;
-            }
-
-            .step {
-                display: flex;
-                align-items: center;
-                gap: 14px;
-                padding: 14px 16px;
-                border: 1.5px solid var(--border);
-                border-radius: var(--radius);
-                margin-bottom: 10px;
-                transition: all 0.2s ease;
-            }
-
-            .step.active {
-                border-color: var(--primary);
-                background: var(--secondary);
-            }
-
-            .step.pending {
-                opacity: 0.45;
-            }
-
-            .step-number {
-                width: 30px;
-                height: 30px;
-                border-radius: 50%;
-                background: #e5e5e5;
-                color: var(--muted);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-weight: 700;
-                font-size: 13px;
-                flex-shrink: 0;
-            }
-
-            .step.active .step-number {
-                background: var(--primary);
-                color: var(--primary-fg);
-            }
-
-            .step.completed .step-number {
-                background: var(--success);
-                color: white;
-            }
-
-            .step-content {
-                flex: 1;
-            }
-
-            .step-title {
-                font-weight: 600;
-                font-size: 14px;
-                color: var(--foreground);
-                margin-bottom: 1px;
-            }
-
-            .step-description {
-                font-size: 13px;
-                color: var(--muted);
-            }
-
-            .step-status {
-                font-size: 13px;
-                color: var(--success);
-                font-weight: 600;
-                flex-shrink: 0;
-            }
-
-            .open-settings-link {
+            .login-message {
                 display: none;
+                width: 100%;
+                padding: 10px 14px;
+                border-radius: 8px;
+                background: var(--warn-bg);
+                border: 1px solid var(--warn-border);
+                color: var(--warn-fg);
                 font-size: 13px;
-                font-weight: 600;
-                color: var(--foreground);
-                cursor: pointer;
-                margin-top: 3px;
+                font-weight: 500;
+                text-align: center;
+                margin-bottom: 16px;
             }
-            .open-settings-link:hover {
-                text-decoration: underline;
-            }
-            .step.active .open-settings-link {
+            .login-message.visible {
                 display: block;
-            }
-
-            .checkmark {
-                width: 16px;
-                height: 16px;
             }
 
             .view-body--centered {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-            }
-
-            .btn-maximize {
-                cursor: default;
             }
 
             /* ==================== READY VIEW ==================== */
@@ -364,7 +279,7 @@
                 width: 56px;
                 height: 56px;
                 border-radius: 50%;
-                background: var(--success-light);
+                background: color-mix(in srgb, var(--ok) 15%, var(--bg));
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -374,7 +289,7 @@
             .ready-icon svg {
                 width: 28px;
                 height: 28px;
-                color: var(--success);
+                color: var(--ok);
             }
 
             .ready-heading {
@@ -394,8 +309,8 @@
 
             .info-card {
                 width: 100%;
-                background: var(--secondary);
-                border: 1px solid var(--border);
+                background: var(--wash);
+                border: 1px solid var(--line);
                 border-radius: var(--radius);
                 padding: 20px 22px;
                 text-align: left;
@@ -411,7 +326,7 @@
                 align-items: flex-start;
                 gap: 10px;
                 font-size: 14px;
-                color: var(--foreground);
+                color: var(--fg);
                 line-height: 1.5;
                 margin-bottom: 12px;
             }
@@ -429,33 +344,228 @@
             }
 
             .learn-more-link {
-                display: block;
-                text-align: center;
                 font-size: 13px;
                 color: var(--muted);
                 cursor: pointer;
-                margin-top: 4px;
                 text-decoration: underline;
             }
             .learn-more-link:hover {
-                color: var(--foreground);
+                color: var(--fg);
             }
 
-            .login-message {
-                display: none;
-                width: 100%;
-                padding: 10px 14px;
-                border-radius: 8px;
-                background: #fef3c7;
-                border: 1px solid #f59e0b;
-                color: #92400e;
-                font-size: 13px;
-                font-weight: 500;
-                text-align: center;
-                margin-bottom: 16px;
+            /* ==================== PERMISSIONS VIEW ==================== */
+            /* Fixed-height blocks: header, rows, note, so nothing moves between states. */
+            #permissionsView {
+                text-align: left;
             }
-            .login-message.visible {
+            .perm-body {
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
+            /* 26px badge slot (always reserved) + title + two-line subtitle */
+            .perm-header {
+                height: 110px;
+                flex: none;
+            }
+            .perm-welcome {
+                height: 16px;
+                margin-bottom: 10px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--ok);
+                animation: rise 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+            }
+            .perm-welcome[hidden] {
+                display: flex;
+                visibility: hidden;
+                animation: none;
+            }
+            @keyframes rise {
+                from {
+                    opacity: 0;
+                    transform: translateY(6px);
+                }
+            }
+            .perm-heading {
+                font-size: 22px;
+                font-weight: 700;
+                letter-spacing: -0.03em;
+                margin-bottom: 6px;
+            }
+            .perm-subtitle {
+                font-size: 14px;
+                color: var(--muted);
+                line-height: 1.5;
+            }
+
+            .perm-panel {
+                flex: none;
+                margin-top: 20px;
+                border: 1.5px solid var(--line2);
+                border-radius: 14px;
+                padding: 2px 20px;
+            }
+            .perm-row {
+                display: grid;
+                grid-template-columns: 40px 1fr 118px;
+                gap: 14px;
+                align-items: center;
+                height: 76px;
+            }
+            .perm-row + .perm-row {
+                border-top: 1px solid var(--line);
+            }
+            .perm-icon {
+                width: 40px;
+                height: 40px;
+                border-radius: 10px;
+                background: var(--wash);
+                color: var(--muted);
+                display: grid;
+                place-items: center;
+            }
+            .perm-icon svg {
+                width: 18px;
+                height: 18px;
+            }
+            .perm-title {
                 display: block;
+                font-size: 15px;
+                font-weight: 650;
+                line-height: 1.3;
+            }
+            .perm-why {
+                margin-top: 2px;
+                font-size: 13px;
+                line-height: 1.4;
+                color: var(--muted);
+            }
+            .perm-row[data-state='waiting'] .perm-why,
+            .perm-row[data-state='settings'] .perm-why {
+                color: var(--fg);
+            }
+            .perm-link {
+                color: var(--fg);
+                font-weight: 600;
+                text-decoration: underline;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            .perm-link:hover {
+                color: var(--muted);
+            }
+
+            .perm-status {
+                justify-self: end;
+                display: flex;
+                justify-content: flex-end;
+                align-items: center;
+            }
+            .perm-action {
+                width: 112px;
+                padding: 7px 0;
+                font-size: 13px;
+                font-weight: 600;
+                font-family: inherit;
+                border-radius: 8px;
+                border: 1.5px solid var(--primary);
+                background: var(--primary);
+                color: var(--primary-fg);
+                cursor: pointer;
+                transition:
+                    background 0.15s,
+                    border-color 0.15s,
+                    color 0.15s;
+            }
+            .perm-action:hover {
+                background: color-mix(in srgb, var(--primary) 85%, var(--bg));
+            }
+            .perm-row[data-state='settings'] .perm-action {
+                background: var(--bg);
+                color: var(--fg);
+                border-color: var(--line2);
+            }
+            .perm-row[data-state='settings'] .perm-action:hover {
+                border-color: var(--muted);
+            }
+            .perm-row[data-live='false'] .perm-action {
+                background: var(--wash);
+                border-color: var(--line);
+                color: var(--muted2);
+                pointer-events: none;
+            }
+            .perm-row[data-state='waiting'] .perm-action,
+            .perm-row[data-state='granted'] .perm-action {
+                display: none;
+            }
+
+            .perm-state {
+                display: none;
+                align-items: center;
+                gap: 6px;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            .perm-row[data-state='waiting'] .perm-state--waiting {
+                display: inline-flex;
+                color: var(--muted);
+                font-weight: 500;
+            }
+            .perm-row[data-state='granted'] .perm-state--granted {
+                display: inline-flex;
+                color: var(--ok);
+            }
+            .perm-spinner {
+                width: 13px;
+                height: 13px;
+                border-radius: 50%;
+                border: 2px solid var(--line2);
+                border-top-color: var(--primary);
+                animation: spin 0.8s linear infinite;
+            }
+            .perm-check {
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                background: var(--ok);
+                color: var(--bg);
+                display: inline-grid;
+                place-items: center;
+                flex-shrink: 0;
+            }
+            .perm-check svg {
+                width: 10px;
+                height: 10px;
+            }
+
+            .perm-note {
+                flex: none;
+                height: 40px;
+                margin-top: 14px;
+                font-size: 12.5px;
+                line-height: 1.45;
+                color: var(--muted);
+            }
+
+            .perm-footer {
+                flex: none;
+                margin-top: auto;
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+            .perm-hint {
+                margin-left: auto;
+                font-size: 13px;
+                color: var(--muted);
+                white-space: nowrap;
+            }
+            .perm-footer .learn-more-link {
+                white-space: nowrap;
             }
         </style>
     </head>
@@ -541,58 +651,63 @@
 
             <!-- Permissions View -->
             <div class="view" id="permissionsView">
-                <div class="view-body">
-                    <h1 class="perm-heading">Grant permissions</h1>
-                    <p class="perm-subtitle">Three quick system permissions to get Gia running.</p>
-
-                    <div class="progress-bar" id="progressBar">
-                        <div class="progress-segment" id="prog-0"></div>
-                        <div class="progress-segment" id="prog-1"></div>
-                        <div class="progress-segment" id="prog-2"></div>
+                <div class="view-body perm-body">
+                    <div class="perm-header">
+                        <div class="perm-welcome" id="welcomeBack" hidden>
+                            <span class="perm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>Welcome back. Picking up where you left off.
+                        </div>
+                        <h1 class="perm-heading">Three permissions, then you're set</h1>
+                        <p class="perm-subtitle">
+                            macOS asks before any app can listen, see your screen, or notice a meeting.
+                        </p>
                     </div>
 
-                    <div class="stepper">
-                        <div class="step" id="step-microphone" data-step="microphone">
-                            <div class="step-number">1</div>
-                            <div class="step-content">
-                                <div class="step-title">Microphone</div>
-                                <div class="step-description">Capture meeting audio</div>
-                                <div class="open-settings-link" data-permission="microphone">
-                                    Open System Settings
-                                </div>
+                    <div class="perm-panel">
+                        <div class="perm-row" data-perm="microphone" data-state="needed" data-live="false">
+                            <div class="perm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg></div>
+                            <div class="perm-text">
+                                <b class="perm-title">Microphone</b>
+                                <p class="perm-why">So Gia can hear the meeting.</p>
                             </div>
-                            <div class="step-status"></div>
+                            <div class="perm-status">
+                                <button class="perm-action" type="button">Allow</button>
+                                <span class="perm-state perm-state--waiting"><span class="perm-spinner"></span>Waiting</span>
+                                <span class="perm-state perm-state--granted"><span class="perm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>Allowed</span>
+                            </div>
                         </div>
-
-                        <div class="step pending" id="step-accessibility" data-step="accessibility">
-                            <div class="step-number">2</div>
-                            <div class="step-content">
-                                <div class="step-title">Accessibility</div>
-                                <div class="step-description">Detect when meetings start</div>
-                                <div class="open-settings-link" data-permission="accessibility">
-                                    Open System Settings
-                                </div>
+                        <div class="perm-row" data-perm="accessibility" data-state="needed" data-live="false">
+                            <div class="perm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8"></path></svg></div>
+                            <div class="perm-text">
+                                <b class="perm-title">Accessibility</b>
+                                <p class="perm-why">So Gia notices when a Zoom, Meet or Teams call starts.</p>
                             </div>
-                            <div class="step-status"></div>
+                            <div class="perm-status">
+                                <button class="perm-action" type="button">Allow</button>
+                                <span class="perm-state perm-state--waiting"><span class="perm-spinner"></span>Waiting</span>
+                                <span class="perm-state perm-state--granted"><span class="perm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>Allowed</span>
+                            </div>
                         </div>
-
-                        <div class="step pending" id="step-screen" data-step="screen">
-                            <div class="step-number">3</div>
-                            <div class="step-content">
-                                <div class="step-title">Screen recording</div>
-                                <div class="step-description">Capture the speaker name</div>
-                                <div class="open-settings-link" data-permission="screen">
-                                    Open System Settings
-                                </div>
+                        <div class="perm-row" data-perm="screen" data-state="needed" data-live="false">
+                            <div class="perm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg></div>
+                            <div class="perm-text">
+                                <b class="perm-title">Screen recording</b>
+                                <p class="perm-why">So Gia can read who is speaking. Nothing is saved.</p>
                             </div>
-                            <div class="step-status"></div>
+                            <div class="perm-status">
+                                <button class="perm-action" type="button">Allow</button>
+                                <span class="perm-state perm-state--waiting"><span class="perm-spinner"></span>Waiting</span>
+                                <span class="perm-state perm-state--granted"><span class="perm-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>Allowed</span>
+                            </div>
                         </div>
                     </div>
-                    <a class="learn-more-link" id="learnMorePermissions"
-                        >Learn more about permissions</a
-                    >
+
+                    <p class="perm-note" id="permNote"></p>
                 </div>
-                <button class="btn" id="permissionBtn">Grant microphone access</button>
+                <div class="perm-footer">
+                    <a class="learn-more-link" id="learnMorePermissions">About permissions</a>
+                    <span class="perm-hint" id="permHint">Allow all three to continue</span>
+                    <button class="btn btn-inline" id="permContinue" disabled>Continue</button>
+                </div>
             </div>
 
             <!-- Ready View -->
@@ -666,29 +781,17 @@
             })();
 
             // Elements
-            const loginView = document.getElementById('loginView');
-            const permissionsView = document.getElementById('permissionsView');
-            const readyView = document.getElementById('readyView');
             const giaLogoEl = document.getElementById('giaLogo');
             const loginBtn = document.getElementById('loginBtn');
-            const permissionBtn = document.getElementById('permissionBtn');
             const getStartedBtn = document.getElementById('getStartedBtn');
             const closeBtn = document.getElementById('closeBtn');
             const minimizeBtn = document.getElementById('minimizeBtn');
+            const permContinue = document.getElementById('permContinue');
+            const permHint = document.getElementById('permHint');
+            const permNote = document.getElementById('permNote');
+            const welcomeBackEl = document.getElementById('welcomeBack');
 
             let isWindows = false;
-
-            // Permission steps
-            const permissionSteps = ['microphone', 'accessibility', 'screen'];
-            let currentStepIndex = 0;
-            let permissionStates = { microphone: false, accessibility: false, screen: false };
-
-            function findFirstUngrantedIndex() {
-                for (let i = 0; i < permissionSteps.length; i++) {
-                    if (!permissionStates[permissionSteps[i]]) return i;
-                }
-                return permissionSteps.length;
-            }
 
             // Window controls
             closeBtn.addEventListener('click', () => {
@@ -711,87 +814,224 @@
                 document.getElementById(viewId).classList.add('active');
             }
 
-            // Update progress bar based on actual permission states
-            function updateProgressBar() {
-                for (let i = 0; i < 3; i++) {
-                    const seg = document.getElementById('prog-' + i);
-                    seg.classList.remove('filled', 'success');
-                    if (permissionStates[permissionSteps[i]]) {
-                        seg.classList.add('success');
-                    } else if (i === currentStepIndex) {
-                        seg.classList.add('filled');
-                    }
-                }
-            }
+            // ==================== PERMISSIONS ====================
+            // One row per permission, allowed in order. A row is:
+            //   needed   -> "Allow" (asks macOS)
+            //   settings -> "Open settings" (macOS already said no once; only System Settings can fix it)
+            //   waiting  -> spinner; leaves only via a granted poll/focus check or the timeout
+            //   granted  -> "Allowed"
+            const PERMS = ['microphone', 'accessibility', 'screen'];
+            const POLL_MS = 1000;
+            const WAIT_MS = 15000;
 
-            // Update step UI
-            function updateStepUI(stepName, status) {
-                const stepEl = document.getElementById('step-' + stepName);
-                if (!stepEl) return;
-
-                stepEl.classList.remove('active', 'completed', 'pending');
-                const statusEl = stepEl.querySelector('.step-status');
-                const numberEl = stepEl.querySelector('.step-number');
-
-                if (status === 'active') {
-                    stepEl.classList.add('active');
-                    statusEl.textContent = '';
-                } else if (status === 'completed') {
-                    stepEl.classList.add('completed');
-                    numberEl.innerHTML =
-                        '<svg class="checkmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-                    statusEl.textContent = 'Granted';
-                } else if (status === 'pending') {
-                    stepEl.classList.add('pending');
-                    statusEl.textContent = '';
-                }
-            }
-
-            // Update button text based on current step
-            function updatePermissionButton() {
-                const step = permissionSteps[currentStepIndex];
-                const labels = {
-                    microphone: 'Grant microphone access',
-                    accessibility: 'Grant accessibility access',
-                    screen: 'Grant screen recording access',
-                };
-                permissionBtn.innerHTML = labels[step] || 'Continue';
-                permissionBtn.disabled = false;
-                updateProgressBar();
-            }
-
-            // Initialize permissions view based on actual permission states
-            function initPermissionsView() {
-                currentStepIndex = findFirstUngrantedIndex();
-                permissionSteps.forEach((step, index) => {
-                    if (permissionStates[step]) {
-                        updateStepUI(step, 'completed');
-                    } else if (index === currentStepIndex) {
-                        updateStepUI(step, 'active');
-                    } else {
-                        updateStepUI(step, 'pending');
-                    }
-                });
-                updatePermissionButton();
-            }
-
-            // Check all permissions and update states
-            async function autoCheckGrantedPermissions() {
-                for (const step of permissionSteps) {
-                    const result = await api.checkPermission(step);
-                    permissionStates[step] = result.granted;
-                }
-                initPermissionsView();
-            }
-
-            // Window size constants
-            const VIEW_SIZES = {
-                login: { width: 440, height: 480 },
-                permissions: { width: 440, height: 520 },
-                ready: { width: 440, height: 460 },
+            const COPY = {
+                why: {
+                    microphone: 'So Gia can hear the meeting.',
+                    accessibility: 'So Gia notices when a Zoom, Meet or Teams call starts.',
+                    screen: 'So Gia can read who is speaking. Nothing is saved.',
+                },
+                instruction: {
+                    microphone: 'Turn on Gia, then come back here.',
+                    accessibility: 'Turn on Gia, then come back here.',
+                    screen: 'Turn on Gia, then come back here.',
+                },
+                openSettings: 'Open System Settings',
+                hint: 'Allow all three to continue',
+                note: 'Gia restarts once after setup so screen recording takes effect.',
             };
 
-            // Login button
+            const rows = {};
+            for (const perm of PERMS) rows[perm] = { state: 'needed', status: 'unknown' };
+
+            let pollTimer = null;
+            const waitTimers = {};
+
+            function rowEl(perm) {
+                return document.querySelector('.perm-row[data-perm="' + perm + '"]');
+            }
+
+            // macOS prompts once for mic and screen; after a decline only System Settings works.
+            function stateFromStatus(perm, status) {
+                if (status === 'granted') return 'granted';
+                if (status === 'denied' && (perm === 'microphone' || perm === 'screen'))
+                    return 'settings';
+                return 'needed';
+            }
+
+            function allGranted() {
+                return PERMS.every((p) => rows[p].state === 'granted');
+            }
+            function anyWaiting() {
+                return PERMS.some((p) => rows[p].state === 'waiting');
+            }
+
+            function render() {
+                const live = PERMS.find((p) => rows[p].state !== 'granted') ?? null;
+                for (const perm of PERMS) {
+                    const row = rows[perm];
+                    const el = rowEl(perm);
+                    el.dataset.state = row.state;
+                    el.dataset.live = String(perm === live);
+                    el.querySelector('.perm-action').textContent =
+                        row.state === 'settings' ? 'Open settings' : 'Allow';
+                    const whyEl = el.querySelector('.perm-why');
+                    if (row.state === 'waiting') {
+                        // The prompt may not open System Settings itself (Accessibility, Screen
+                        // recording): give the user a direct way there while they wait.
+                        whyEl.textContent = COPY.instruction[perm] + ' ';
+                        const link = document.createElement('a');
+                        link.className = 'perm-link';
+                        link.textContent = COPY.openSettings;
+                        whyEl.appendChild(link);
+                    } else if (row.state === 'settings') {
+                        whyEl.textContent = COPY.instruction[perm];
+                    } else {
+                        whyEl.textContent = COPY.why[perm];
+                    }
+                }
+                const done = allGranted();
+                permHint.textContent = done ? '' : COPY.hint;
+                permNote.textContent = done ? COPY.note : '';
+                permContinue.disabled = !done;
+            }
+
+            function setState(perm, state) {
+                rows[perm].state = state;
+                if (state !== 'waiting' && waitTimers[perm]) {
+                    clearTimeout(waitTimers[perm]);
+                    delete waitTimers[perm];
+                }
+            }
+
+            // Re-read every row from the OS. A waiting row only changes when it is granted.
+            async function refreshAll() {
+                for (const perm of PERMS) {
+                    let result;
+                    try {
+                        result = await api.checkPermission(perm);
+                    } catch (e) {
+                        console.warn('checkPermission failed for ' + perm, e);
+                        continue;
+                    }
+                    rows[perm].status = result.status ?? (result.granted ? 'granted' : 'unknown');
+                    if (result.granted) {
+                        if (rows[perm].state !== 'granted') console.log('Permission ' + perm + ' granted');
+                        setState(perm, 'granted');
+                    } else if (rows[perm].state !== 'waiting') {
+                        setState(perm, stateFromStatus(perm, rows[perm].status));
+                    }
+                }
+                if (!anyWaiting()) stopPolling();
+                return allGranted();
+            }
+
+            function startPolling() {
+                if (pollTimer) return;
+                pollTimer = setInterval(async () => {
+                    await refreshAll();
+                    render();
+                }, POLL_MS);
+            }
+            function stopPolling() {
+                if (!pollTimer) return;
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+
+            // No answer after WAIT_MS while Gia is in front: offer the button again.
+            // Away in System Settings, the row keeps waiting.
+            function armWaitTimer(perm) {
+                if (waitTimers[perm]) clearTimeout(waitTimers[perm]);
+                waitTimers[perm] = setTimeout(() => expireWaiting(perm), WAIT_MS);
+            }
+            async function expireWaiting(perm) {
+                delete waitTimers[perm];
+                if (rows[perm].state !== 'waiting') return;
+                if (!document.hasFocus()) {
+                    armWaitTimer(perm);
+                    return;
+                }
+                try {
+                    const result = await api.checkPermission(perm);
+                    rows[perm].status = result.status ?? 'unknown';
+                    setState(perm, result.granted ? 'granted' : stateFromStatus(perm, rows[perm].status));
+                } catch (e) {
+                    console.warn('recheck failed for ' + perm, e);
+                    setState(perm, 'needed');
+                }
+                console.log('Permission ' + perm + ' still not granted after timeout');
+                if (!anyWaiting()) stopPolling();
+                render();
+            }
+
+            async function request(perm) {
+                const row = rows[perm];
+                if (row.state === 'waiting' || row.state === 'granted') return;
+                console.log('Requesting permission ' + perm + ' (' + row.state + ')');
+                try {
+                    if (row.state === 'settings') {
+                        await api.openSettings(perm);
+                    } else {
+                        const result = await api.requestPermission(perm);
+                        if (result?.granted) {
+                            setState(perm, 'granted');
+                            render();
+                            if (!anyWaiting()) stopPolling();
+                            return;
+                        }
+                    }
+                    setState(perm, 'waiting');
+                    render();
+                    armWaitTimer(perm);
+                    startPolling();
+                } catch (e) {
+                    console.error('Permission request error for ' + perm, e);
+                    setState(perm, stateFromStatus(perm, row.status));
+                    render();
+                }
+            }
+
+            // Seed rows from the init payload's raw statuses, then confirm with the OS.
+            async function enterPermissions({ statuses, welcomeBack } = {}) {
+                for (const perm of PERMS) {
+                    const status = statuses?.[perm] ?? 'unknown';
+                    rows[perm].status = status;
+                    setState(perm, stateFromStatus(perm, status));
+                }
+                welcomeBackEl.hidden = !welcomeBack;
+                showView('permissionsView');
+                render();
+                await refreshAll();
+                render();
+            }
+
+            document.querySelector('.perm-panel').addEventListener('click', (e) => {
+                const perm = e.target.closest('.perm-row')?.dataset.perm;
+                if (!perm) return;
+                if (e.target.closest('.perm-link')) {
+                    console.log('Opening System Settings for ' + perm);
+                    api.openSettings(perm);
+                    return;
+                }
+                if (e.target.closest('.perm-action')) request(perm);
+            });
+
+            // Back from System Settings: see what changed right away, waiting row or not.
+            window.addEventListener('focus', () => {
+                if (!document.getElementById('permissionsView').classList.contains('active')) return;
+                refreshAll().then(render);
+            });
+
+            permContinue.addEventListener('click', async () => {
+                if (!allGranted()) return;
+                console.log('Finishing setup...');
+                permContinue.disabled = true;
+                permContinue.innerHTML = '<div class="spinner"></div>Finishing...';
+                stopPolling();
+                await api.complete();
+            });
+
+            // ==================== LOGIN ====================
             loginBtn.addEventListener('click', async () => {
                 loginBtn.disabled = true;
                 loginBtn.innerHTML = '<div class="spinner"></div>Signing in...';
@@ -802,15 +1042,11 @@
                         if (isWindows) {
                             // Windows doesn't need permissions — skip to complete
                             console.log('Login successful, skipping permissions (Windows)');
-                            permissionBtn.disabled = true;
                             await api.complete();
                             return;
                         }
                         console.log('Login successful, moving to permissions');
-                        await api.resize(VIEW_SIZES.permissions);
-                        showView('permissionsView');
-                        initPermissionsView();
-                        await autoCheckGrantedPermissions();
+                        await enterPermissions({ welcomeBack: false });
                     } else {
                         console.error('Login failed:', result.error);
                         loginBtn.disabled = false;
@@ -820,83 +1056,6 @@
                     console.error('Login error:', error);
                     loginBtn.disabled = false;
                     loginBtn.textContent = 'Continue with Gia';
-                }
-            });
-
-            // Track if we're waiting for a permission grant
-            let waitingForPermission = null;
-
-            function startWaitingForPermission(permission) {
-                waitingForPermission = permission;
-                console.log('Waiting for SDK permission-status event for ' + permission + '...');
-                permissionBtn.textContent = 'Waiting for permission...';
-                permissionBtn.disabled = true;
-            }
-
-            // Centralized handler for when a permission is granted
-            function handlePermissionGranted(permission) {
-                permissionStates[permission] = true;
-                console.log('Permission ' + permission + ' granted');
-                updateStepUI(permission, 'completed');
-
-                currentStepIndex = findFirstUngrantedIndex();
-
-                if (currentStepIndex >= permissionSteps.length) {
-                    console.log('All permissions granted!');
-                    permissionBtn.textContent = 'Finish setup';
-                    permissionBtn.disabled = false;
-                    updateProgressBar();
-                } else {
-                    updateStepUI(permissionSteps[currentStepIndex], 'active');
-                    updatePermissionButton();
-                }
-            }
-
-            // Open System Settings links
-            document.querySelectorAll('.open-settings-link').forEach(function (link) {
-                link.addEventListener('click', function (e) {
-                    e.stopPropagation();
-                    var permission = link.dataset.permission;
-                    api.openSettings(permission);
-                });
-            });
-
-            // Permission button
-            permissionBtn.addEventListener('click', async () => {
-                const step = permissionSteps[currentStepIndex];
-
-                // If all permissions done, this is the "Finish setup" click
-                if (currentStepIndex >= permissionSteps.length) {
-                    console.log('Finishing setup...');
-                    permissionBtn.disabled = true;
-                    permissionBtn.innerHTML = '<div class="spinner"></div>Finishing...';
-                    await api.complete();
-                    return;
-                }
-
-                // If we're already waiting for this permission, don't request again
-                if (waitingForPermission === step) {
-                    console.log('Already waiting for ' + step + ' permission, ignoring click');
-                    return;
-                }
-
-                permissionBtn.disabled = true;
-                permissionBtn.innerHTML = '<div class="spinner"></div>Requesting...';
-
-                try {
-                    const result = await api.requestPermission(step);
-                    console.log('Permission ' + step + ' result:', result);
-
-                    if (result.granted) {
-                        handlePermissionGranted(step);
-                    } else {
-                        console.log(step + ' not granted yet, waiting...');
-                        startWaitingForPermission(step);
-                    }
-                } catch (error) {
-                    console.error('Permission error:', error);
-                    waitingForPermission = null;
-                    updatePermissionButton();
                 }
             });
 
@@ -929,21 +1088,17 @@
                 }
 
                 if (payload.view === 'ready') {
+                    stopPolling();
                     if (payload.firstName) {
                         document.getElementById('readyHeading').textContent =
                             "You're good to go, " + payload.firstName;
                     }
                     showView('readyView');
                 } else if (payload.view === 'permissions') {
-                    showView('permissionsView');
-                    if (payload.permissions) {
-                        permissionStates = {
-                            microphone: !!payload.permissions.microphone,
-                            accessibility: !!payload.permissions.accessibility,
-                            screen: !!payload.permissions.screen,
-                        };
-                    }
-                    initPermissionsView();
+                    await enterPermissions({
+                        statuses: payload.statuses,
+                        welcomeBack: !!payload.welcomeBack,
+                    });
                 } else {
                     showView('loginView');
                     const msgEl = document.getElementById('loginMessage');
@@ -956,20 +1111,21 @@
                 }
             });
 
-            // Listen for permission status updates (in case granted via System Preferences)
+            // SDK permission-status events. Granted: trust it. Not granted: only a row that
+            // already shows Allowed reacts (revocation); a waiting row is decided by polling.
             api.onPermissionStatus((payload) => {
                 console.log('Permission status update:', payload);
                 const { permission, granted } = payload;
+                if (!rows[permission]) return;
 
                 if (granted) {
-                    if (waitingForPermission === permission) {
-                        waitingForPermission = null;
-                    }
-                    handlePermissionGranted(permission);
-                } else {
-                    // Permission revoked — update state and re-render
-                    permissionStates[permission] = false;
-                    initPermissionsView();
+                    setState(permission, 'granted');
+                    if (!anyWaiting()) stopPolling();
+                    render();
+                    return;
+                }
+                if (rows[permission].state === 'granted') {
+                    refreshAll().then(render);
                 }
             });
         </script>
