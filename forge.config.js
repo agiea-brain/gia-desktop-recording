@@ -96,6 +96,26 @@ module.exports = {
 		},
 	},
 	rebuildConfig: {},
+	hooks: {
+		// Unsigned local packages: @electron/packager rewrites Info.plist (bundle id, name,
+		// icon) but leaves Electron's original ad-hoc signature, so the bundle seal is broken
+		// ("invalid Info.plist"). macOS TCC refuses to prompt for an app whose signature does
+		// not validate, which silently denies microphone/screen requests. Re-sign ad hoc.
+		postPackage: async (_forgeConfig, { platform, outputPaths }) => {
+			if (platform !== 'darwin' || SHOULD_SIGN_MAC) return;
+			const { execFileSync } = require('child_process');
+			const fs = require('fs');
+			const path = require('path');
+			for (const dir of outputPaths) {
+				const app = fs.readdirSync(dir).find((f) => f.endsWith('.app'));
+				if (!app) continue;
+				const appPath = path.join(dir, app);
+				execFileSync('codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'inherit' });
+				execFileSync('codesign', ['--verify', '--deep', '--strict', appPath], { stdio: 'inherit' });
+				console.log(`[forge] ad-hoc signed ${appPath}`);
+			}
+		},
+	},
 	makers: [
 		{
 			name: '@electron-forge/maker-dmg',

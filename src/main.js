@@ -264,6 +264,12 @@ let desktopDiagnosticsLastSentAt = 0;
 let recallPermissionStatuses = {};
 let recallPermissionStatusesUpdatedAt = null;
 
+function noteSdkPermissionStatus(permission, status) {
+    if (typeof permission !== 'string') return;
+    recallPermissionStatuses = { ...(recallPermissionStatuses || {}), [permission]: status };
+    recallPermissionStatusesUpdatedAt = new Date().toISOString();
+}
+
 function stableStringify(value) {
     // Deterministic JSON stringify (sort object keys).
     // Avoids spurious "changed" detection due to key order.
@@ -502,11 +508,16 @@ function readPermissionStates() {
         return null; // unknown / unsupported
     };
 
+    // macOS caches TCC authorization per process. A grant obtained through the Recall SDK
+    // helper's prompt is not visible to getMediaAccessStatus() until Gia restarts, so a
+    // 'granted' report from the SDK wins over a stale OS read for the media permissions.
+    const sdkGranted = (perm) => recallPermissionStatuses?.[perm] === 'granted';
     return {
         accessibility: getAccessibilityTrusted(), // true/false/null
-        microphone: getMediaStatus('microphone'), // granted/denied/not-determined/restricted/unknown
+        // granted/denied/not-determined/restricted/unknown
+        microphone: sdkGranted('microphone') ? 'granted' : getMediaStatus('microphone'),
         // Electron calls this media type "screen" (Recall SDK calls it "screen-capture").
-        screenCapture: getMediaStatus('screen'),
+        screenCapture: sdkGranted('screen-capture') ? 'granted' : getMediaStatus('screen'),
     };
 }
 
@@ -1717,11 +1728,7 @@ function ensureRecallRuntimeListenersRegistered() {
         // Track latest permission statuses for diagnostics.
         try {
             if (typeof permission === 'string') {
-                recallPermissionStatuses = {
-                    ...(recallPermissionStatuses || {}),
-                    [permission]: status,
-                };
-                recallPermissionStatusesUpdatedAt = new Date().toISOString();
+                noteSdkPermissionStatus(permission, status);
                 sendDesktopSdkDiagnosticsIfNeeded();
             }
         } catch (e) {
@@ -1922,6 +1929,7 @@ function ensureSdkInitialized() {
         RecallAiSdk.addEventListener('permission-status', (evt) => {
             const { permission, status } = evt;
             logger.info(`[recall] onboarding permission-status: ${permission}, ${status}`);
+            noteSdkPermissionStatus(permission, status);
 
             // Notify onboarding popup if it's open
             if (onboardingWindow && !onboardingWindow.isDestroyed()) {
@@ -2857,11 +2865,16 @@ async function bootstrap() {
     logger.info('[app] onboarding already complete:', onboardingAlreadyComplete);
 
     if (onboardingAlreadyComplete) {
-        // Initialize SDK and register event listeners
-        logger.info('[app] onboarding complete, initializing SDK');
+        // If a permission is missing, the permissions popup is reopened below and must drive
+        // the prompts (one click => one prompt). The SDK requests all three on init by default
+        // and we used to request them again here, which opened the Accessibility prompt before
+        // the user touched the popup. Keep the SDK quiet in that case.
+        const permissionsMissing = !areAllPermissionsGranted();
+        logger.info('[app] onboarding complete, initializing SDK', { permissionsMissing });
         RecallAiSdk.init({
             // NOTE: Recall SDK expects `apiUrl` (camelCase)
             apiUrl: 'https://us-east-1.recall.ai',
+            ...(permissionsMissing ? { acquirePermissionsOnStartup: [] } : {}),
         });
         sdkInitialized = true;
 
@@ -2870,11 +2883,14 @@ async function bootstrap() {
 
         setupPermissionLogging({ onChange: onPermissionChange });
 
-        // Request permissions
-        logger.info('[permissions] requesting permissions');
-        RecallAiSdk.requestPermission('accessibility');
-        RecallAiSdk.requestPermission('microphone');
-        RecallAiSdk.requestPermission('screen-capture');
+        if (permissionsMissing) {
+            logger.info('[permissions] missing permissions, popup will drive the requests');
+        } else {
+            logger.info('[permissions] requesting permissions');
+            RecallAiSdk.requestPermission('accessibility');
+            RecallAiSdk.requestPermission('microphone');
+            RecallAiSdk.requestPermission('screen-capture');
+        }
         ensureRecallRuntimeListenersRegistered();
     } else {
         logger.info('[app] onboarding not complete, SDK not initialized yet');
