@@ -220,128 +220,103 @@ async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs
     <title>${safeTitle}</title>
     <style>
       :root {
-        --bg: #ffffff;
+        --bg: #fafafa;
         --fg: #0a0a0a;
-        --muted: #6b7280;
-        --border: rgba(0,0,0,0.10);
-        --shadow: 0 10px 30px rgba(0,0,0,0.10);
-        --radius: 14px;
-        --primary: #111827;
-        --primary-fg: #ffffff;
-        --secondary: #f3f4f6;
+        --muted: #737373;
+        --faint: #a3a3a3;
+        --border: rgba(0,0,0,0.08);
+        --btn-bg: #0a0a0a;
+        --btn-fg: #ffffff;
         --success: #16a34a;
-        --success-bg: #dcfce7;
         --error: #dc2626;
-        --error-bg: #fee2e2;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0a0a0a;
+          --fg: #fafafa;
+          --muted: #a3a3a3;
+          --faint: #6b6b6b;
+          --border: rgba(255,255,255,0.10);
+          --btn-bg: #fafafa;
+          --btn-fg: #0a0a0a;
+        }
       }
       * { box-sizing: border-box; }
       html, body { height: 100%; }
       body {
         margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         background: var(--bg);
         color: var(--fg);
-      }
-      .page-header {
-        position: absolute;
-        top: 24px;
-        left: 32px;
-      }
-      .logo {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        font-weight: 700;
-        font-size: 20px;
-        letter-spacing: -0.02em;
-        color: var(--fg);
-      }
-      .logo svg { width: 32px; height: 32px; display: block; }
-      
-      .wrap {
-        min-height: 100%;
+        -webkit-font-smoothing: antialiased;
         display: grid;
         place-items: center;
         padding: 24px;
       }
-      .card {
-        width: min(440px, 100%);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        padding: 48px 40px 40px;
-        background: white;
-        text-align: center;
+      .wrap {
+        width: min(360px, 100%);
         display: flex;
         flex-direction: column;
         align-items: center;
+        text-align: center;
+        animation: rise .5s cubic-bezier(.2,.7,.2,1) both;
       }
-      
-      .status-icon {
-        width: 48px;
-        height: 48px;
-        margin-bottom: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
+      @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+      .mark { position: relative; width: 44px; height: 44px; margin-bottom: 28px; }
+      .mark svg.logo { width: 44px; height: 44px; display: block; }
+      .badge {
+        position: absolute; right: -4px; bottom: -4px;
+        width: 18px; height: 18px; border-radius: 50%;
+        display: grid; place-items: center;
+        color: #fff; box-shadow: 0 0 0 3px var(--bg);
       }
-      .status-icon.success { background: var(--success-bg); color: var(--success); }
-      .status-icon.error { background: var(--error-bg); color: var(--error); }
-      .status-icon svg { width: 24px; height: 24px; }
-
+      .badge.success { background: var(--success); }
+      .badge.error { background: var(--error); }
+      .badge svg { width: 10px; height: 10px; }
       h1 {
         margin: 0 0 8px;
-        font-size: 24px;
+        font-size: 22px;
         font-weight: 600;
-        letter-spacing: -0.025em;
-        color: var(--fg);
+        letter-spacing: -0.02em;
       }
       p {
         margin: 0;
         color: var(--muted);
-        font-size: 16px;
+        font-size: 15px;
         line-height: 1.5;
       }
-      .actions {
-        margin-top: 32px;
-        width: 100%;
-        display: flex;
-        justify-content: center;
-      }
+      p a { color: inherit; }
       a.btn {
+        margin-top: 28px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: #111827;
-        color: white;
+        height: 40px;
+        padding: 0 22px;
+        border-radius: 999px;
+        background: var(--btn-bg);
+        color: var(--btn-fg);
         text-decoration: none;
-        padding: 12px 24px;
-        border-radius: 8px;
         font-size: 14px;
         font-weight: 500;
-        transition: background-color 0.2s;
-        min-width: 120px;
+        transition: opacity .15s, transform .15s;
       }
-      a.btn:hover {
-        background: #1f2937;
-      }
+      a.btn:hover { opacity: .85; }
+      a.btn:active { transform: scale(.98); }
       .fineprint {
-        margin-top: 24px;
-        font-size: 13px;
-        color: var(--muted);
-        max-width: 320px;
-        margin-left: auto;
-        margin-right: auto;
+        margin-top: 20px;
+        font-size: 12px;
+        color: var(--faint);
         line-height: 1.4;
       }
       pre {
-        margin: 10px 0 0;
+        margin: 12px 0 0;
         padding: 10px 12px;
-        border-radius: 12px;
+        width: 100%;
+        border-radius: 10px;
         border: 1px solid var(--border);
-        background: #fafafa;
-        color: #111827;
+        color: var(--muted);
+        text-align: left;
         white-space: pre-wrap;
         word-break: break-word;
         font-size: 12px;
@@ -349,50 +324,38 @@ async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs
       }
     </style>
   </head>
-  <body>
-    <div class="page-header">
-      <div class="logo" aria-label="Gia">
-        <svg width="771" height="771" viewBox="0 0 771 771" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gia logo">
-          <path fill-rule="evenodd" clip-rule="evenodd" d="M744.71 632.273L733.18 551.378C757.066 500.951 771 445.216 771 385.5C771 172.513 598.487 0 385.5 0C172.513 0 0 172.513 0 385.5C0 598.487 172.513 771 385.5 771C457.159 771 523.51 751.095 580.572 717.256L760.773 744.71L744.71 632.273ZM519.703 476.819C490.486 519.684 441.272 547.828 385.484 547.828C295.84 547.828 223.169 475.157 223.169 385.512C223.169 295.868 295.84 223.197 385.484 223.197C453.604 223.197 511.922 265.159 536.001 324.644H600.267C573.772 230.967 487.644 162.328 385.484 162.328C262.223 162.328 162.3 262.251 162.3 385.512C162.3 508.774 262.223 608.697 385.484 608.697C448.36 608.697 505.164 582.696 545.729 540.86V608.701H606.598V415.951H413.848V476.819H519.703Z" fill="url(#paint0_linear_318_26)"/>
+  <body data-variant="${variant}">
+    <main class="wrap">
+      <div class="mark">
+        <svg class="logo" viewBox="0 0 771 771" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gia">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M744.71 632.273L733.18 551.378C757.066 500.951 771 445.216 771 385.5C771 172.513 598.487 0 385.5 0C172.513 0 0 172.513 0 385.5C0 598.487 172.513 771 385.5 771C457.159 771 523.51 751.095 580.572 717.256L760.773 744.71L744.71 632.273ZM519.703 476.819C490.486 519.684 441.272 547.828 385.484 547.828C295.84 547.828 223.169 475.157 223.169 385.512C223.169 295.868 295.84 223.197 385.484 223.197C453.604 223.197 511.922 265.159 536.001 324.644H600.267C573.772 230.967 487.644 162.328 385.484 162.328C262.223 162.328 162.3 262.251 162.3 385.512C162.3 508.774 262.223 608.697 385.484 608.697C448.36 608.697 505.164 582.696 545.729 540.86V608.701H606.598V415.951H413.848V476.819H519.703Z" fill="url(#giaGrad)"/>
           <defs>
-            <linearGradient id="paint0_linear_318_26" x1="568.105" y1="-5.53754e-06" x2="142.026" y2="771" gradientUnits="userSpaceOnUse">
+            <linearGradient id="giaGrad" x1="568.105" y1="0" x2="142.026" y2="771" gradientUnits="userSpaceOnUse">
               <stop stop-color="#FFB731"/>
               <stop offset="1" stop-color="#FC6466"/>
             </linearGradient>
           </defs>
         </svg>
-        <span>Gia</span>
+        <span class="badge ${variant}">${
+            variant === 'success'
+                ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+                : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
+        }</span>
       </div>
-    </div>
 
-    <div class="wrap">
-      <div class="card">
-        <div class="status-icon ${variant}">
-          ${
-              variant === 'success'
-                  ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
-                  : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
-          }
-        </div>
-        
-        <h1>${safeHeading}</h1>
-        ${body}
-        
-        <div class="actions">
-          <a class="btn" id="openBtn" href="${openAppUrl}">Open Gia</a>
-        </div>
+      <h1>${safeHeading}</h1>
+      ${body}
 
-        <div class="fineprint">
-          If the "Open Gia" button doesn’t work, switch back to the Gia app from your Dock / menu bar.
-        </div>
-      </div>
-    </div>
+      <a class="btn" id="openBtn" href="${openAppUrl}">Open Gia</a>
+
+      <div class="fineprint">Didn’t open? Switch to Gia from your menu bar.</div>
+    </main>
     <script>
       document.getElementById("openBtn").addEventListener("click", function() {
         setTimeout(function() { window.close(); }, 500);
       });
       // Auto-open Gia on success via hidden iframe (keeps page visible)
-      if (document.querySelector(".status-icon.success")) {
+      if (document.body.dataset.variant === "success") {
         var f = document.createElement("iframe");
         f.style.display = "none";
         f.src = document.getElementById("openBtn").href;
@@ -407,7 +370,7 @@ async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs
                 if (error === 'login_required' || error === 'interaction_required') {
                     // Silent auth failed — user needs to log in interactively.
                     // Show a brief message and auto-close so the interactive tab takes over.
-                    res.end(`<!doctype html><html><head><title>Redirecting…</title></head><body>
+                    res.end(`<!doctype html><html lang="en"><head><title>Redirecting…</title></head><body>
                         <p style="font-family:sans-serif;text-align:center;margin-top:40vh;color:#6b7280">Opening login…</p>
                         <script>setTimeout(function(){window.close()},1500)</script></body></html>`);
                 } else if (error) {
@@ -415,20 +378,20 @@ async function startLoopbackCallbackServer({ host, port, callbackPath, timeoutMs
                     res.end(
                         page({
                             title: 'Login failed',
-                            heading: 'Login failed',
+                            heading: 'Sign-in failed',
                             variant: 'error',
-                            body: `<p>Something went wrong while signing in. Please try again from the Gia menu bar app.</p>${
+                            body: `<p>Something went wrong. Try again from the Gia menu bar.</p>${
                                 safeDesc ? `<pre>${safeDesc}</pre>` : ''
-                            }<p style="margin-top:16px;font-size:14px;color:var(--muted)">If this keeps happening, reach out to <a href="mailto:support@myagiea.com" style="color:var(--error)">support@myagiea.com</a></p>`,
+                            }<p style="margin-top:12px;font-size:13px">Still stuck? <a href="mailto:support@myagiea.com">support@myagiea.com</a></p>`,
                         }),
                     );
                 } else {
                     res.end(
                         page({
                             title: 'Login complete',
-                            heading: 'Login complete',
+                            heading: 'You’re all set',
                             variant: 'success',
-                            body: `<p>You’re signed in. Return to Gia to continue setup.</p>`,
+                            body: `<p>You’re signed in. Head back to Gia to finish setup.</p>`,
                         }),
                     );
                 }
